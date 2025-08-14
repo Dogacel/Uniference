@@ -8,11 +8,13 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed in accordance with the terms of the Llama 3 Community License Agreement.
 
+from models.llama3.comm.realm import SyncKVCache
 import math
 from typing import Optional, Tuple
 
 import fairscale.nn.model_parallel.initialize as fs_init
 import torch
+from torch import Tensor
 import torch.nn.functional as F
 from fairscale.nn.model_parallel.layers import (
     ColumnParallelLinear,
@@ -106,7 +108,7 @@ def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class Attention(nn.Module):
-    def __init__(self, args: ModelArgs):
+    def __init__(self, layer_id: int, args: ModelArgs):
         super().__init__()
         self.n_kv_heads = args.n_heads if args.n_kv_heads is None else args.n_kv_heads
         world_size = fs_init.get_model_parallel_world_size()
@@ -114,6 +116,8 @@ class Attention(nn.Module):
         self.n_local_kv_heads = self.n_kv_heads // world_size
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
         self.head_dim = args.dim // args.n_heads
+        self.realm = args.realm
+        self.layer_id = layer_id
 
         self.wq = ColumnParallelLinear(
             args.dim,
@@ -161,6 +165,23 @@ class Attention(nn.Module):
             )
         )
 
+        self.cache_known = torch.zeros(
+            (
+                args.max_seq_len,
+            )
+        )
+
+        self.use_kv_cache = args.use_kv_cache
+
+    def insert_cache_value(self, start_pos: int, xk: torch.Tensor, xv: torch.Tensor):
+        seqlen = xk.shape[1]
+        self.cache_k[:1, start_pos : start_pos + seqlen] = xk
+        self.cache_v[:1, start_pos : start_pos + seqlen] = xv
+        self.cache_known[start_pos : start_pos + seqlen] = 1
+    
+    def clean_cache(self):
+        self.cache_known.zero_()
+
     def forward(
         self,
         x: torch.Tensor,
@@ -177,14 +198,26 @@ class Attention(nn.Module):
 
         xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
 
-        self.cache_k = self.cache_k.to(xq)
-        self.cache_v = self.cache_v.to(xq)
+        if self.use_kv_cache:
+            self.cache_k = self.cache_k.to(xq)
+            self.cache_v = self.cache_v.to(xq)
 
-        self.cache_k[:bsz, start_pos : start_pos + seqlen] = xk
-        self.cache_v[:bsz, start_pos : start_pos + seqlen] = xv
+            if self.cache_known[start_pos : start_pos + seqlen].sum() != seqlen:
+                self.insert_cache_value(start_pos, xk, xv)
 
-        keys = self.cache_k[:bsz, : start_pos + seqlen]
-        values = self.cache_v[:bsz, : start_pos + seqlen]
+                if self.realm is not None:
+                    self.realm.chan("cache").send(SyncKVCache(
+                        layer_id=self.layer_id,
+                        start_pos=start_pos,
+                        xk=xk,
+                        xv=xv
+                    ))
+
+            keys = self.cache_k[:bsz, : start_pos + seqlen]
+            values = self.cache_v[:bsz, : start_pos + seqlen]
+        else:
+            keys = xk
+            values = xv
 
         # repeat k/v heads if n_kv_heads < n_heads
         keys = repeat_kv(keys, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
@@ -231,7 +264,7 @@ class TransformerBlock(nn.Module):
         self.n_heads = args.n_heads
         self.dim = args.dim
         self.head_dim = args.dim // args.n_heads
-        self.attention = Attention(args)
+        self.attention = Attention(layer_id, args)
         self.feed_forward = FeedForward(
             dim=args.dim,
             hidden_dim=4 * args.dim,
@@ -241,6 +274,12 @@ class TransformerBlock(nn.Module):
         self.layer_id = layer_id
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
+
+    def sync_kv_cache(self, start_pos: int, xk: Tensor, xv):
+        self.attention.insert_cache_value(start_pos, xk, xv)
+
+    def clean_cache(self):
+        self.attention.clean_cache()
 
     def forward(
         self,
@@ -277,12 +316,31 @@ class Transformer(nn.Module):
             params.use_scaled_rope,
         )
 
+        self.use_kv_cache = params.use_kv_cache
+
+    def sync_kv_cache(self, layer_id: int, start_pos: int, xk: Tensor, xv: Tensor):
+        layer = self.layers[layer_id]
+
+        if isinstance(layer, TransformerBlock):
+            layer.sync_kv_cache(start_pos, xk, xv)
+        else:
+            raise TypeError(f"Layer {layer_id} is not a TransformerBlock, but {type(layer)}")
+
+    def clean_cache(self):
+        for layer in self.layers:
+            if isinstance(layer, TransformerBlock):
+                layer.clean_cache()
+
     @torch.inference_mode()
     def forward(self, tokens: torch.Tensor, start_pos: int):
         _bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
         self.freqs_cis = self.freqs_cis.to(h.device)
-        freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
+
+        if self.use_kv_cache:
+            freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
+        else:
+            freqs_cis = self.freqs_cis[ : seqlen]
 
         mask = None
         if seqlen > 1:
@@ -300,7 +358,10 @@ class Transformer(nn.Module):
             # only for the new sequence. Thus, the matrix of scores is of size
             # (seqlen, cache_len + seqlen), and the only masked entries are (i, j) for
             # j > cache_len + i, since row i corresponds to token cache_len + i.
-            mask = torch.hstack([torch.zeros((seqlen, start_pos), device=tokens.device), mask]).type_as(h)
+            if self.use_kv_cache:
+                mask = torch.hstack([torch.zeros((seqlen, start_pos), device=tokens.device), mask]).type_as(h)
+            else:
+                mask = mask.to(tokens.device)
 
         for layer in self.layers:
             h = layer(h, start_pos, freqs_cis, mask)

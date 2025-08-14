@@ -5,6 +5,8 @@
 # top-level folder for each specific model found within the models/ directory at
 # the top-level of this source tree.
 
+from models.llama3.comm.realm import Realm
+from importlib.metadata import distribution
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
@@ -58,6 +60,9 @@ class ModelArgs:
 
     quantization_args: Optional[QuantizationArgs] = None
     lora_args: Optional[LoRAArgs] = None
+
+    realm: Optional[Realm] = None
+    use_kv_cache: bool = True
 
     def __init__(self, **kwargs):
         for k, v in kwargs.items():

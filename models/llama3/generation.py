@@ -5,6 +5,10 @@
 # top-level folder for each specific model found within the models/ directory at
 # the top-level of this source tree.
 
+from models.llama3.comm.realm import SyncGen
+from models.llama3.comm.realm import SyncKVCache
+from models.llama3.comm.realm import Realm
+from torch.types import Device
 import json
 import os
 import sys
@@ -45,9 +49,14 @@ class Llama3:
         world_size: Optional[int] = None,
         quantization_mode: Optional[QuantizationMode] = None,
         seed: int = 1,
-        device: str = "cuda",
+        device: str | Device = "cuda",
+        realm: Optional[Realm] = None,
+        use_kv_cache: bool = True,
     ):
-        device = torch.device(device)
+
+        if device is not Device:
+            device = torch.device(device)
+
         if (
             device.type == "cuda"
             and not torch.cuda.is_available()
@@ -91,6 +100,8 @@ class Llama3:
         model_args: ModelArgs = ModelArgs(
             max_seq_len=max_seq_len,
             max_batch_size=max_batch_size,
+            realm=realm,
+            use_kv_cache=use_kv_cache,
             **params,
         )
         tokenizer = Tokenizer.get_instance()
@@ -149,6 +160,28 @@ class Llama3:
         self.model = model
         self.tokenizer = tokenizer
         self.formatter = ChatFormat(tokenizer)
+        self.gen_cache = []
+
+    def sync_kv_cache(self, msg: SyncKVCache):
+        if isinstance(self.model, Transformer):
+            self.model.sync_kv_cache(layer_id=msg.layer_id, start_pos=msg.start_pos, xk=msg.xk, xv=msg.xv)
+        else:
+            raise TypeError(f"Model is not a Transformer, but {type(self.model)}")
+
+    def sync_gen_cache(self, msg: SyncGen):
+        self.gen_cache.append(msg)
+
+    def send_sync_gen(self, pos: int, next_token: torch.Tensor):
+        if self.args.realm is not None:
+            msg = SyncGen(pos=pos, next_token=next_token)
+            self.args.realm.chan("gen").send(msg)
+
+    def clean_cache(self):
+        if isinstance(self.model, Transformer):
+            self.model.clean_cache()
+        else:
+            raise TypeError(f"Model is not a Transformer, but {type(self.model)}")
+        self.gen_cache.clear()
 
     @torch.inference_mode()
     def generate(
@@ -230,7 +263,11 @@ class Llama3:
         stop_tokens = torch.tensor(self.tokenizer.stop_tokens)
 
         prev_pos = 0
-        for cur_pos in range(min_prompt_len, total_len):
+        for elem in self.gen_cache:
+            tokens[:, elem.pos] = elem.next_token
+            prev_pos = elem.pos
+
+        for cur_pos in range(max(min_prompt_len, prev_pos + 1), total_len):
             if is_vision:
                 position_ids = torch.arange(prev_pos, cur_pos, dtype=torch.long)
                 text_only_inference = all(inp.vision is None for inp in model_inputs)
@@ -242,8 +279,10 @@ class Llama3:
                     xattn_caches,
                     text_only_inference,
                 )
-            else:
+            elif self.model.use_kv_cache:
                 logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
+            else:
+                logits = self.model.forward(tokens[:, :cur_pos], prev_pos)
 
             if logits_processor is not None:
                 logits = logits_processor(tokens[:, :cur_pos], logits)
@@ -258,6 +297,7 @@ class Llama3:
             # only replace token if prompt has already been generated
             next_token = torch.where(input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token)
             tokens[:, cur_pos] = next_token
+            self.send_sync_gen(cur_pos, next_token)
 
             target = tokens[:, prev_pos + 1 : cur_pos + 1]
             if is_vision:
