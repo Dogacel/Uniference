@@ -206,7 +206,7 @@ class Attention(nn.Module):
                 self.insert_cache_value(start_pos, xk, xv)
 
                 if self.realm is not None:
-                    self.realm.world.chan("cache").send(SyncKVCache(
+                    self.realm.me.send("cache", SyncKVCache(
                         layer_id=self.layer_id,
                         start_pos=start_pos,
                         xk=xk,

@@ -18,6 +18,10 @@ dependencies = [
     "pydantic>=2",
     "Pillow",
     "rich",
+    "torch>=2.6.0",
+    "greenlet>=3.2.4",
+    "fire>=0.7.0",
+    "packaging>=24.2",
 ]
 classifiers = []
 
@@ -46,7 +50,7 @@ torch = [
     "fairscale",
     "fire",
     "blobfile",
-    "fbgemm-gpu-genai==1.1.2",
+    "fbgemm-gpu-genai==1.1.2; sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
 
 [tool.setuptools]

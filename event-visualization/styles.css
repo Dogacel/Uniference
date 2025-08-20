@@ -1,0 +1,122 @@
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    width: 95vw;
+    max-width: none;
+    margin: auto;
+    background: white;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+    text-align: center;
+}
+
+label {
+    display: block;
+    margin: 10px 0 5px;
+}
+
+input[type="range"] {
+    width: 100%;
+}
+
+#eventDisplay {
+    margin-top: 20px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #e9e9e9;
+    min-height: 180px;
+}
+
+.device-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: flex-start;
+}
+
+.device-card {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 1em;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    min-width: 220px;
+    max-width: 540px;
+    flex: 1 1 320px;
+    background: #f9f9f9;
+    box-sizing: border-box;
+}
+
+.state {
+    font-weight: bold;
+    padding: 0.3em 0.7em;
+    border-radius: 4px;
+    display: inline-block;
+    margin-bottom: 0.5em;
+}
+
+.state.idle {
+    background: #c8f7c5;
+    color: #1b5e20;
+}
+
+.state.running {
+    background: #fff9c4;
+    color: #bfa600;
+}
+
+.state.terminated {
+    background: #ffccbc;
+    color: #bf360c;
+}
+
+.state.finished {
+    background: #c5cae9;
+    color: #1a237e;
+}
+
+.state.unknown {
+    background: #e0e0e0;
+    color: #666;
+}
+
+.tokens {
+    margin-top: 0.5em;
+    font-size: 1.1em;
+    word-break: break-all;
+}
+
+.device-stat {
+    margin-top: 0.3em;
+    color: #555;
+}
+
+.current-time {
+    font-family: monospace;
+    font-size: 1.2em;
+    margin: 10px 0;
+    text-align: left;
+}
+
+.controls-row {
+    display: flex;
+    align-items: center;
+    gap: 1em;
+    margin: 10px 0;
+}
+
+.controls-row label {
+    margin: 0;
+    min-width: 100px;
+}

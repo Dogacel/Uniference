@@ -136,14 +136,14 @@ class Llama3:
             torch.set_default_device(device)
             if device.type == "cuda":
                 if torch.cuda.is_bf16_supported():
-                    torch.set_default_dtype(torch.bfloat16)
+                    torch.set_default_tensor_type(torch.bfloat16)
                 else:
-                    torch.set_default_dtype(torch.half)
+                    torch.set_default_tensor_type(torch.half)
             elif device.type == "xpu":
                 if torch.xpu.is_bf16_supported():
-                    torch.set_default_dtype(torch.bfloat16)
+                    torch.set_default_tensor_type(torch.bfloat16)
                 else:
-                    torch.set_default_dtype(torch.half)
+                    torch.set_default_tensor_type(torch.half)
 
             model = build_model()
             print("Loading state dict...")
@@ -174,7 +174,7 @@ class Llama3:
     def send_sync_gen(self, pos: int, next_token: torch.Tensor):
         if self.args.realm is not None:
             msg = SyncGen(pos=pos, next_token=next_token)
-            self.args.realm.world.chan("gen").send(msg)
+            self.args.realm.me.send("gen", msg)
 
     def clean_cache(self):
         if isinstance(self.model, Transformer):

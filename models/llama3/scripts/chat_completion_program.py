@@ -1,17 +1,5 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the terms described in the LICENSE file in
-# top-level folder for each specific model found within the models/ directory at
-# the top-level of this source tree.
-
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# This software may be used and distributed in accordance with the terms of the Llama 3 Community License Agreement.
-
-from typing import Any
 from models.llama3.comm.realm import Realm
 from models.llama3.comm.realm import Program
-from time import perf_counter
 from typing import Optional
 
 import fire
@@ -37,9 +25,18 @@ def get_device():
 class TextGenerationHAProgram(Program):
     def __init__(self):
         super().__init__()
+        self.model: Llama3
+        self.ckpt_dir: str
+        self.temperature: float
+        self.top_p: float
+        self.max_seq_len: int
+        self.max_batch_size: int
+        self.world_size: Optional[int]
+        self.quantization_mode: Optional[str]
+        self.disable_kv_cache: bool
 
-    def runnable(self, realm: Realm) -> None:
-        def program(
+    def initialize(self, realm: Realm) -> None:
+        def __initialize_model(
             ckpt_dir: str,
             temperature: float = 0.6,
             top_p: float = 0.9,
@@ -48,52 +45,75 @@ class TextGenerationHAProgram(Program):
             world_size: Optional[int] = None,
             quantization_mode: Optional[str] = None,
             disable_kv_cache: bool = False,
+            **kwargs,
         ) -> None:
-            model: Llama3 = Llama3.build(
-                ckpt_dir=ckpt_dir,
-                max_seq_len=max_seq_len,
-                max_batch_size=max_batch_size,
-                world_size=world_size,
-                quantization_mode=quantization_mode,
-                device=get_device(),
-                realm=realm,
-                use_kv_cache=not disable_kv_cache,
-            )
+            self.ckpt_dir = ckpt_dir
+            self.temperature = temperature
+            self.top_p = top_p
+            self.max_seq_len = max_seq_len
+            self.max_batch_size = max_batch_size
+            self.world_size = world_size
+            self.quantization_mode = quantization_mode
+            self.disable_kv_cache = disable_kv_cache
 
-            world = realm.world
-            me = realm.me
+        fire.Fire(__initialize_model)
 
-            # Non client machines will be listening for cache updates
-            if not me.client:
-                world.chan("cache").add_listener(model.sync_kv_cache)
-                world.chan("gen").add_listener(model.sync_gen_cache)
-            else:
-                input = world.chan("input").receive(me)
+        self.realm = realm
+        self.model = Llama3.build(
+            ckpt_dir=self.ckpt_dir,
+            max_seq_len=self.max_seq_len,
+            max_batch_size=self.max_batch_size,
+            world_size=self.world_size,
+            quantization_mode=self.quantization_mode,
+            device=get_device(),
+            realm=realm,
+            use_kv_cache=not self.disable_kv_cache,
+        )
 
-            def evaluate(model: Llama3, dialog: list[RawMessage]):
-                batch = [dialog]
+    def run(self) -> None:
+        world = self.realm.world
+        me = self.realm.me
+        model = self.model
 
-                start_time = perf_counter()
-                generated_token_count = 0
+        # Non client machines will be listening for cache updates
+        input: Optional[list[RawMessage]] = None
+        if not me.client:
+            world.chan("cache").add_listener(model.sync_kv_cache)
+            world.chan("gen").add_listener(model.sync_gen_cache)
+            input = world.chan("input_fallback").receive(me)
+        else:
+            input = world.chan("input").receive(me)
 
-                for token_results in model.chat_completion(
-                    batch,
-                    temperature=temperature,
-                    top_p=top_p,
-                    max_gen_len=max_seq_len,
-                ):
-                    result = token_results[0]
-                    generated_token_count += 1
+        def evaluate(model: Llama3, dialog: list[RawMessage]):
+            batch = [dialog]
 
-                    if result.finished:
-                        break
+            generated_token_count = 0
 
-                    cprint(result.text, color="yellow", end="", flush=True)
-                print("\n")
+            for token_results in model.chat_completion(
+                batch,
+                temperature=self.temperature,
+                top_p=self.top_p,
+                max_gen_len=self.max_seq_len,
+            ):
+                result = token_results[0]
+                generated_token_count += 1
 
+                if result.finished:
+                    break
+
+                world.event_logger.log_event(
+                    {
+                        "device": me.name,
+                        "action": "generate",
+                        "time": world.device_states[me].clock,
+                        "token": result.text,
+                    }
+                )
+                cprint(result.text, color="yellow", end="", flush=True)
+            print("\n")
+
+        if input is not None:
             for msg in input:
                 print(f"{msg.role.capitalize()}: {msg.content}\n")
-                model.clean_cache()
                 evaluate(model, [msg])
-
-        fire.Fire(program)
+                model.clean_cache()

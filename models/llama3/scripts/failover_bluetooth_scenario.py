@@ -1,3 +1,4 @@
+
 from models.llama3.scripts.chat_completion_program import TextGenerationHAProgram
 from models.llama3.comm.realm import s
 from models.datatypes import RawMessage
@@ -13,26 +14,24 @@ from models.llama3.comm.realm import World
 
 world = World()
 
-program = TextGenerationHAProgram()
-
 phone_spec = DeviceSpec(flops=24 * TFLOPs, mem=8 * GB, max_bandwidth=5 * Gbps, inherent_latency=10 * ms)
 
 phone = world.device(
-    deviceArgs= DeviceArgs(spec=phone_spec, client=True, name="user-phone"),
-    program=program,
+    deviceArgs=DeviceArgs(spec=phone_spec, client=True, name="user-phone"),
+    program=TextGenerationHAProgram(),
 )
 
 spare_phone = world.device(
     deviceArgs=DeviceArgs(spec=phone_spec, client=True, name="user-spare-phone"),
-    program=program,
+    program=TextGenerationHAProgram(),
 )
 
-# unknown_phones = [
-#     world.device(
-#         deviceArgs=DeviceArgs(spec=phone_spec, client=True, name=f"user-unknown-phone-{i}"),
-#         program=program
-#     ) for i in range(5)
-# ]
+unknown_phones = [
+    world.device(
+        deviceArgs=DeviceArgs(spec=phone_spec, client=True, name=f"user-unknown-phone-{i}"),
+        program=TextGenerationHAProgram()
+    ) for i in range(5)
+]
 
 local_wifi = world.network(
     NetworkArgs(
@@ -42,17 +41,21 @@ local_wifi = world.network(
     )
 )
 
-# bluetooth_mesh = world.network(
-#     NetworkArgs(
-#         devices=[phone, spare_phone] + unknown_phones,
-#         bandwidth=2.0 * Mbps,
-#         latency=10 * ms,
-#     )
-# )
+bluetooth_mesh = world.network(
+    NetworkArgs(
+        devices=[phone, spare_phone] + unknown_phones,
+        bandwidth=2.0 * Mbps,
+        latency=10 * ms,
+    )
+)
 
-world.chan("input").send([RawMessage(role="user", content="what is the recipe of mayonnaise?")])
+world.chan("input").send(0, [RawMessage(role="user", content="what is the recipe of mayonnaise?")])
 
-world.after_time(5 * s).hook("phone_disconnected", lambda _: spare_phone.terminate())
+def disconnect_hook():
+    phone.terminate()
+    world.chan("input_fallback").send(0, [RawMessage(role="user", content="what is the recipe of mayonnaise?")])
+
+world.after_time(5 * s).hook("phone_disconnected", disconnect_hook)
 
 if __name__ == "__main__":
     world.run()

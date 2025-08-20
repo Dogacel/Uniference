@@ -5,3 +5,5 @@ build
 .DS_Store
 .vscode/
 checkpoints
+event_log.jsonl
+results/
