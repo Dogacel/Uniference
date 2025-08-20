@@ -11,7 +11,7 @@ if [[ "$1" == "nokv" ]]; then
   EXTRA_ARGS="--disable_kv_cache"
 fi
 
-python -m models.llama3.scripts.chat_completion_multi \
+python -m models.llama3.scripts.failover_scenario \
   --ckpt_dir ./checkpoints/Llama-3.2-1B-Instruct/original \
   --max_seq_len 512 \
   --temperature 0.6 \

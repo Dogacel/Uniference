@@ -8,19 +8,15 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed in accordance with the terms of the Llama 3 Community License Agreement.
 
-from time import time, perf_counter
-from models.llama3.comm.realm import Device
-from models.llama3.comm.realm import InMemoryChan
-from models.llama3.comm.realm import Chan
 from models.llama3.comm.realm import Realm
-from io import BytesIO
+from time import perf_counter
 from pathlib import Path
 from typing import Optional
 
 import fire
 from termcolor import cprint
 
-from models.datatypes import RawMediaItem, RawMessage, RawTextItem, StopReason
+from models.datatypes import RawMessage
 from models.llama3.generation import Llama3
 
 import os
@@ -39,25 +35,6 @@ def get_device():
     return "cpu"
 
 
-cache_chan = InMemoryChan()
-gen_chan = InMemoryChan()
-
-class TestRealm(Realm):
-    def __init__(self, role):
-        super().__init__()
-
-        self.role = role
-
-    def chan(self, tag: str) -> Chan:
-        if tag == "cache":
-            return cache_chan
-        elif tag == "gen":
-            return gen_chan
-        raise ValueError(f"Unknown channel tag: {tag}")
-
-    def me(self) -> Device:
-        return Device(tag=self.role)
-
 def run_main(
     ckpt_dir: str,
     temperature: float = 0.6,
@@ -68,8 +45,7 @@ def run_main(
     quantization_mode: Optional[str] = None,
     disable_kv_cache: bool = False,
 ):
-
-    leader_realm = TestRealm(role="leader")
+    realm = Realm(world=World(), me=Device())
     leader: Llama3 = Llama3.build(
         ckpt_dir=ckpt_dir,
         max_seq_len=max_seq_len,
@@ -77,11 +53,11 @@ def run_main(
         world_size=world_size,
         quantization_mode=quantization_mode,
         device=get_device(),
-        realm=leader_realm,
+        realm=realm,
         use_kv_cache=not disable_kv_cache,
     )
 
-    follower_realm = TestRealm(role="follower")
+    follower_realm = HAReplicationRealm(role="follower")
     follower: Llama3 = Llama3.build(
         ckpt_dir=ckpt_dir,
         max_seq_len=max_seq_len,
@@ -89,15 +65,15 @@ def run_main(
         world_size=world_size,
         quantization_mode=quantization_mode,
         device=get_device(),
-        realm=follower_realm,
+        realm=realm,
         use_kv_cache=not disable_kv_cache,
     )
 
-    cache_chan.add_listener(follower.sync_kv_cache)
-    cache_chan.start_worker()
+    realm.cache_chan.add_listener(follower.sync_kv_cache)
+    realm.cache_chan.start_worker()
 
-    gen_chan.add_listener(follower.sync_gen_cache)
-    gen_chan.start_worker()
+    realm.gen_chan.add_listener(follower.sync_gen_cache)
+    realm.gen_chan.start_worker()
 
     dialogs = [
         [RawMessage(role="user", content="what is the recipe of mayonnaise?")],
@@ -110,7 +86,6 @@ def run_main(
         #     RawMessage(role="user", content="How to go from Beijing to NY?"),
         # ],
     ]
-
 
     def evaluate(model: Llama3, dialog: list[RawMessage]):
         batch = [dialog]
@@ -138,16 +113,7 @@ def run_main(
                 print(f"Total tokens generated: {generated_token_count}")
                 print(f"Total tokens per second: {generated_token_count / (end_time - start_time):.2f}")
 
-                print(f"cache_chan.total_transferred_bytes: {cache_chan.total_transferred_bytes / 1_000_000:.2f} MB")
-                print(f"cache_chan.total_transferred_count: {cache_chan.total_transferred_count}")
-                print(f"cache_chan bandwith used: {cache_chan.total_transferred_bytes / 1_000_000 / (end_time - start_time):.2f} MB/s")
-
-                print(f"gen_chan.total_transferred_bytes: {gen_chan.total_transferred_bytes / 1_000:.2f} KB")
-                print(f"gen_chan.total_transferred_count: {gen_chan.total_transferred_count}")
-                print(f"gen_chan bandwith used: {gen_chan.total_transferred_bytes / 1_000 / (end_time - start_time):.2f} KB/s")
-
-                cache_chan.reset_counters()
-                gen_chan.reset_counters()
+                realm.print_stats(start_time)
 
                 break
 
@@ -162,10 +128,8 @@ def run_main(
             follower.clean_cache()
 
             evaluate(leader, dialog)
-            
+
             evaluate(follower, dialog)
-
-
 
 
 def main():

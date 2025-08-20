@@ -174,7 +174,7 @@ class Llama3:
     def send_sync_gen(self, pos: int, next_token: torch.Tensor):
         if self.args.realm is not None:
             msg = SyncGen(pos=pos, next_token=next_token)
-            self.args.realm.chan("gen").send(msg)
+            self.args.realm.world.chan("gen").send(msg)
 
     def clean_cache(self):
         if isinstance(self.model, Transformer):
