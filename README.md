@@ -2,6 +2,8 @@
 
 Simulation suite for running transformer models on edge devices in distributed settings.
 
+![Simulation Suite Overview](https://i.imgur.com/MVGREdV.png)
+
 ## Quickstart
 
 We recommend running _Llama 3_ models. To get started, download the LLama model weights into checkpoints directory.
@@ -22,18 +24,44 @@ uv sync --extra torch
 
 ```
 
-## Creating new scenarios
+## Codebase
 
-TODO: Document how to create new scenarios
+This project is initially forked from [llama-models](https://github.com/meta-llama/llama-models/). Therefore inherits some utilities and folders from the upstream llama project.
+
+- **event-visualization**: A web page for replaying a recorded simulation.
+- **models**: Keeps transformer models that are run in simulations.
+  - Files `checkpoint.py`, `datatypes.py`, `quantize_impls.py` and `tokenizer_utils.py` are taken from the upstream `llama-models` repository. They are common dependencies used by different llama models.
+  - Currently Llama models are preferred to be modified for distributed settings, however there is no limitation on the type of models can be used.
+- **programs**: Stores programs, that can be loaded into devices to be run by them. Each program should use some `models`.
+- **scenarios**: Contains scenarios, which aim to imitate the real-life like scenarios for testing the model performance. Scenarios should use some `programs`.
+- **simsuite**: Source code for the simulation software that is used to emulate a multi-device real-life like scenario.
+
+## Adding new models
+
+You should add your models that implement new types of distributed inference algorithms under `models` directory.
+
+Easiest way to get started is to inspect the `llama3_ha` model, which emulates KV-Cache and generated token synchronization between two devices.
+
+Inside your model, you can access the simulated device and world by passing it via the program.
 
 ## Writing new programs
 
-TODO: Describe how to write new programs
+In order to run your model on a device, you should write a wrapper program around it. Programs control how your device should interact with the model.
 
-## Modifying models
+To get started, inspect the `ping_pong_program`. This program waits until all devices have generated a token until it proceeds to generate the next token.
 
-TODO: Describe how to modify models to 
+## Creating new scenarios
+
+Here are some key elements while creating scenarios, which describe the world where each device exists, their capabilities and how they connect to each other.
+
+- **World**: Describes a simulation world, where devices live in.
+- **Device**: TODO 
+- **Chan**: TODO
 
 ## Running simulations
 
-TODO: Describe how to run simulations
+Currently only way to run a simulation is to run it on your local device. You can do this by using the `./run.sh` utility.
+
+```shell
+./run.sh scenarios.synchronize_scenario --device_count=2 --prompt="Don't say anything else, just count from 1 to 10."
+```
