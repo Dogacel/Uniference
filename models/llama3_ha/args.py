@@ -52,28 +52,13 @@ class ModelArgs:
     max_batch_size: int = 32
     max_seq_len: int = 2048
 
-    # vision model params
-    vision_chunk_size: int = -1  # image resolution for image models
-    vision_max_num_chunks: int = 4
-    vision_num_cross_attention_layers: int = -1
-
-    quantization_args: Optional[QuantizationArgs] = None
-    lora_args: Optional[LoRAArgs] = None
-
     me: Optional[Device] = None
     use_kv_cache: bool = True
 
     def __init__(self, **kwargs):
         for k, v in kwargs.items():
-            if k == "lora_args":
-                setattr(self, k, LoRAArgs(**v))
-            elif k == "quantization_args":
-                setattr(self, k, QuantizationArgs(**v))
-            elif k == "vision_model" and "cross_attention_adapter" in v:
-                self.vision_num_cross_attention_layers = v["cross_attention_adapter"]["num_layers"]
-            else:
-                if hasattr(self, k):
-                    setattr(self, k, v)
+            if hasattr(self, k):
+                setattr(self, k, v)
 
         if self.n_kv_heads is None:
             self.n_kv_heads = self.n_heads

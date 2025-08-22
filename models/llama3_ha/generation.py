@@ -30,7 +30,6 @@ from ..datatypes import GenerationResult, QuantizationMode, RawContent, RawMessa
 from .args import ModelArgs
 from .chat_format import ChatFormat, LLMInput
 from .model import Transformer
-from .multimodal.model import CrossAttentionTransformer
 from .tokenizer import Tokenizer
 
 
@@ -53,7 +52,6 @@ class Llama3:
         me: Optional[Device] = None,
         use_kv_cache: bool = True,
     ):
-
         if device is not Device:
             device = torch.device(device)
 
@@ -114,48 +112,32 @@ class Llama3:
         assert model_args.vocab_size == tokenizer.n_words
 
         def build_model():
-            if model_args.vision_chunk_size > 0:
-                model = CrossAttentionTransformer(model_args)
-                model.setup_cache(model_args.max_batch_size, device=device, dtype=torch.get_default_dtype())
+            return Transformer(model_args)
+
+        print(f"Setting default device to {device}")
+        torch.set_default_device(device)
+        if device.type == "cuda":
+            if torch.cuda.is_bf16_supported():
+                torch.set_default_tensor_type(torch.bfloat16)
             else:
-                model = Transformer(model_args)
-            return model
+                torch.set_default_tensor_type(torch.half)
+        elif device.type == "xpu":
+            if torch.xpu.is_bf16_supported():
+                torch.set_default_tensor_type(torch.bfloat16)
+            else:
+                torch.set_default_tensor_type(torch.half)
 
-        if quantization_mode == QuantizationMode.fp8_mixed or quantization_mode == QuantizationMode.int4_mixed:
-            from .quantization.loader import convert_to_quantized_model
-
-            torch.set_default_tensor_type(torch.BFloat16Tensor)
-            model = build_model()
-            print("Loading state dict...")
-            model.load_state_dict(state_dict, strict=False)
-            print("Done...")
-            model = convert_to_quantized_model(model, ckpt_dir, quantization_mode, device=device)
-            torch.set_default_device(device)
-        else:
-            print(f"Setting default device to {device}")
-            torch.set_default_device(device)
-            if device.type == "cuda":
-                if torch.cuda.is_bf16_supported():
-                    torch.set_default_tensor_type(torch.bfloat16)
-                else:
-                    torch.set_default_tensor_type(torch.half)
-            elif device.type == "xpu":
-                if torch.xpu.is_bf16_supported():
-                    torch.set_default_tensor_type(torch.bfloat16)
-                else:
-                    torch.set_default_tensor_type(torch.half)
-
-            model = build_model()
-            print("Loading state dict...")
-            model.load_state_dict(state_dict, strict=True)
-            model.to(device)
-            print("Done...")
+        model = build_model()
+        print("Loading state dict...")
+        model.load_state_dict(state_dict, strict=True)
+        model.to(device)
+        print("Done...")
 
         print(f"Loaded in {time.time() - start_time:.2f} seconds")
 
         return Llama3(model, tokenizer, model_args)
 
-    def __init__(self, model: Transformer | CrossAttentionTransformer, tokenizer: Tokenizer, args: ModelArgs):
+    def __init__(self, model: Transformer, tokenizer: Tokenizer, args: ModelArgs):
         self.args = args
         self.model = model
         self.tokenizer = tokenizer
@@ -228,18 +210,6 @@ class Llama3:
         if logprobs:
             token_logprobs = torch.zeros_like(tokens, dtype=torch.float)
 
-        is_vision = not isinstance(self.model, Transformer)
-        if is_vision:
-            images = [inp.vision.images if inp.vision is not None else [] for inp in model_inputs]
-            mask = [inp.vision.mask if inp.vision is not None else [] for inp in model_inputs]
-
-            xattn_caches, cross_attention_masks, full_text_row_masked_out_mask = self.model.compute_vision_tokens_masks(
-                batch_images=images,
-                batch_masks=mask,
-                total_len=total_len,
-                device=tokens.device,
-            )
-
         eos_reached = torch.tensor([False] * bsz)
         input_text_mask = tokens != pad_id
 
@@ -268,18 +238,7 @@ class Llama3:
             prev_pos = elem.pos
 
         for cur_pos in range(max(min_prompt_len, prev_pos + 1), total_len):
-            if is_vision:
-                position_ids = torch.arange(prev_pos, cur_pos, dtype=torch.long)
-                text_only_inference = all(inp.vision is None for inp in model_inputs)
-                logits = self.model.forward(
-                    position_ids,
-                    tokens,
-                    cross_attention_masks,
-                    full_text_row_masked_out_mask,
-                    xattn_caches,
-                    text_only_inference,
-                )
-            elif self.model.use_kv_cache:
+            if self.model.use_kv_cache:
                 logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             else:
                 logits = self.model.forward(tokens[:, :cur_pos], prev_pos)
@@ -300,17 +259,6 @@ class Llama3:
             self.send_sync_gen(cur_pos, next_token)
 
             target = tokens[:, prev_pos + 1 : cur_pos + 1]
-            if is_vision:
-                # the logits space (num_classes) is designed to never contain a media_token
-                # however our input token stream does contain them. we need to nuke them here
-                # or else the CUDA kernels will crash with an illegal memory access
-                vision_tokens = [self.tokenizer.special_tokens["<|image|>"], 128256]
-                masks = [target.eq(t) for t in vision_tokens]
-                if len(masks) > 1:
-                    mask = torch.logical_or(*masks)
-                else:
-                    mask = masks[0]
-                target[mask] = 0
 
             if logprobs:
                 token_logprobs[:, prev_pos + 1 : cur_pos + 1] = -F.cross_entropy(

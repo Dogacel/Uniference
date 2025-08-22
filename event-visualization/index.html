@@ -1,24 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Event Log Visualization</title>
     <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/sigma.js/2.4.0/sigma.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/graphology/0.25.4/graphology.umd.min.js"></script>
 </head>
+
 <body>
     <div class="container">
-        <h1>Event Log Visualization</h1>
-        <div>
-            <label for="eventSelector">Select Event File:</label>
-            <input type="file" id="eventSelector" accept=".jsonl">
+        <div id="main-content">
+            <h1>Event Log Visualization</h1>
+            <div>
+                <label for="eventSelector">Select Event File:</label>
+                <input type="file" id="eventSelector" accept=".jsonl">
+            </div>
+            <div>
+                <label for="timeSlider">Event Time Slider:</label>
+                <input type="range" id="timeSlider" min="0" max="100" step="1" value="0">
+            </div>
+            <div id="eventDisplay"></div>
+            <div id="graphDisplay"></div>
         </div>
-        <div>
-            <label for="timeSlider">Event Time Slider:</label>
-            <input type="range" id="timeSlider" min="0" max="100" step="1" value="0">
-        </div>
-        <div id="eventDisplay"></div>
+        <div id="chanDisplay"></div>
     </div>
     <script src="script.js"></script>
 </body>
+
 </html>

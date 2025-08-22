@@ -1,14 +1,14 @@
-from models.llama3.scripts.chat_completion_program import TextGenerationHAProgram
-from models.llama3.comm.realm import s
+from programs.chat_completion_program import TextGenerationHAProgram
+from simsuite.units import s
 from models.datatypes import RawMessage
-from models.llama3.comm.realm import NetworkArgs
-from models.llama3.comm.realm import DeviceArgs
-from models.llama3.comm.realm import TFLOPs
-from models.llama3.comm.realm import ms
-from models.llama3.comm.realm import Gbps
-from models.llama3.comm.realm import GB
-from models.llama3.comm.realm import DeviceSpec
-from models.llama3.comm.realm import World
+from simsuite.network import NetworkArgs
+from simsuite.device import DeviceArgs
+from simsuite.device import DeviceSpec
+from simsuite.units import TFLOPs
+from simsuite.units import ms
+from simsuite.units import Gbps
+from simsuite.units import GB
+from simsuite.world import World
 
 world = World()
 
@@ -35,9 +35,13 @@ local_wifi = world.network(
 
 world.chan("input").send(0, [RawMessage(role="user", content="what is the recipe of mayonnaise?")])
 
+
 def disconnect_hook():
     phone.terminate()
-    world.chan("input_fallback").send(world.device_states[phone].clock, [RawMessage(role="user", content="what is the recipe of mayonnaise?")])
+    world.chan("input_fallback").send(
+        world.device_states[phone].clock, [RawMessage(role="user", content="what is the recipe of mayonnaise?")]
+    )
+
 
 world.after_time(2 * s).hook("phone_disconnected", disconnect_hook)
 

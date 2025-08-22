@@ -6,13 +6,37 @@ body {
 }
 
 .container {
-    width: 95vw;
-    max-width: none;
-    margin: auto;
-    background: white;
-    padding: 20px;
-    border-radius: 5px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    width: 97vw;
+    max-width: 100vw;
+}
+
+#main-content {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+#chanDisplay {
+    width: 320px;
+    min-width: 220px;
+    max-width: 400px;
+    margin-left: 24px;
+    background: #f5f7fa;
+    border: 1px solid #bbb;
+    border-radius: 8px;
+    padding: 16px;
+    box-sizing: border-box;
+    font-size: 1em;
+    height: 90vh;
+    overflow-y: auto;
+}
+
+#chanDisplay h3 {
+    margin-top: 0;
+    font-size: 1.1em;
+    color: #333;
 }
 
 h1 {
@@ -35,6 +59,15 @@ input[type="range"] {
     border-radius: 5px;
     background-color: #e9e9e9;
     min-height: 180px;
+}
+
+#graphDisplay {
+    margin-top: 20px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #e9e9e9;
+    min-height: 320px;
 }
 
 .device-list {
@@ -119,4 +152,31 @@ input[type="range"] {
 .controls-row label {
     margin: 0;
     min-width: 100px;
+}
+
+.chan-msg {
+    margin-bottom: 1em;
+    padding: 0.5em 0.7em;
+    border-radius: 5px;
+    background: #e3f2fd;
+    border-left: 4px solid #1976d2;
+    font-family: monospace;
+}
+
+.chan-wrap {
+    margin-bottom: 1em;
+    padding: 0.5em 0.7em;
+    border-radius: 5px;
+    background: #e3f2fd;
+    font-family: monospace; 
+}
+
+.chan-arrived {
+    background: #c8f7c5;
+    border-left-color: #1b5e20;
+}
+
+.chan-pending {
+    background: #fff9c4;
+    border-left-color: #bfa600;
 }

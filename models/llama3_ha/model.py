@@ -165,11 +165,7 @@ class Attention(nn.Module):
             )
         )
 
-        self.cache_known = torch.zeros(
-            (
-                args.max_seq_len,
-            )
-        )
+        self.cache_known = torch.zeros((args.max_seq_len,))
 
         self.use_kv_cache = args.use_kv_cache
 
@@ -178,7 +174,7 @@ class Attention(nn.Module):
         self.cache_k[:1, start_pos : start_pos + seqlen] = xk
         self.cache_v[:1, start_pos : start_pos + seqlen] = xv
         self.cache_known[start_pos : start_pos + seqlen] = 1
-    
+
     def clean_cache(self):
         self.cache_known.zero_()
 
@@ -206,12 +202,7 @@ class Attention(nn.Module):
                 self.insert_cache_value(start_pos, xk, xv)
 
                 if self.me is not None:
-                    self.me.send("cache", SyncKVCache(
-                        layer_id=self.layer_id,
-                        start_pos=start_pos,
-                        xk=xk,
-                        xv=xv
-                    ))
+                    self.me.send("cache", SyncKVCache(layer_id=self.layer_id, start_pos=start_pos, xk=xk, xv=xv))
 
             keys = self.cache_k[:bsz, : start_pos + seqlen]
             values = self.cache_v[:bsz, : start_pos + seqlen]
@@ -340,7 +331,7 @@ class Transformer(nn.Module):
         if self.use_kv_cache:
             freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
         else:
-            freqs_cis = self.freqs_cis[ : seqlen]
+            freqs_cis = self.freqs_cis[:seqlen]
 
         mask = None
         if seqlen > 1:

@@ -1,16 +1,16 @@
 
-from models.llama3.scripts.chat_completion_program import TextGenerationHAProgram
-from models.llama3.comm.realm import s
+from programs.chat_completion_program import TextGenerationHAProgram
+from simsuite.units import s
 from models.datatypes import RawMessage
-from models.llama3.comm.realm import Mbps
-from models.llama3.comm.realm import NetworkArgs
-from models.llama3.comm.realm import DeviceArgs
-from models.llama3.comm.realm import TFLOPs
-from models.llama3.comm.realm import ms
-from models.llama3.comm.realm import Gbps
-from models.llama3.comm.realm import GB
-from models.llama3.comm.realm import DeviceSpec
-from models.llama3.comm.realm import World
+from simsuite.units import Mbps
+from simsuite.network import NetworkArgs
+from simsuite.device import DeviceArgs
+from simsuite.units import TFLOPs
+from simsuite.units import ms
+from simsuite.units import Gbps
+from simsuite.units import GB
+from simsuite.device import DeviceSpec
+from simsuite.world import World
 
 world = World()
 

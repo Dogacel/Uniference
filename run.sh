@@ -5,7 +5,6 @@ export WORLD_SIZE=1
 export MASTER_ADDR=localhost
 export MASTER_PORT=12345
 
-
 TARGET_SCENARIO="$1"
 shift
 EXTRA_ARGS=("$@")

@@ -1,12 +1,12 @@
-from models.llama3.comm.realm import Realm
-from models.llama3.comm.realm import Program
+from simsuite.device import Device
+from simsuite.world import Program
 from typing import Optional
 
 import fire
 from termcolor import cprint
 
 from models.datatypes import RawMessage
-from models.llama3.generation import Llama3
+from models.llama3_ha.generation import Llama3
 
 import os
 import torch
@@ -35,7 +35,7 @@ class TextGenerationHAProgram(Program):
         self.quantization_mode: Optional[str]
         self.disable_kv_cache: bool
 
-    def initialize(self, realm: Realm) -> None:
+    def initialize(self, me: Device) -> None:
         def __initialize_model(
             ckpt_dir: str,
             temperature: float = 0.6,
@@ -58,7 +58,7 @@ class TextGenerationHAProgram(Program):
 
         fire.Fire(__initialize_model)
 
-        self.realm = realm
+        self.me = me
         self.model = Llama3.build(
             ckpt_dir=self.ckpt_dir,
             max_seq_len=self.max_seq_len,
@@ -66,14 +66,19 @@ class TextGenerationHAProgram(Program):
             world_size=self.world_size,
             quantization_mode=self.quantization_mode,
             device=get_device(),
-            realm=realm,
+            me=me,
             use_kv_cache=not self.disable_kv_cache,
         )
 
     def run(self) -> None:
-        world = self.realm.world
-        me = self.realm.me
+        world = self.me.world
+        me = self.me
         model = self.model
+
+        world.chan("cache").subscribe(me)
+        world.chan("gen").subscribe(me)
+        world.chan("input").subscribe(me)
+        world.chan("input_fallback").subscribe(me)
 
         # Non client machines will be listening for cache updates
         input: Optional[list[RawMessage]] = None
