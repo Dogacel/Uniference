@@ -54,7 +54,6 @@ class ModelArgs:
     max_seq_len: int = 2048
 
     use_kv_cache: bool = True
-    enable_sync: bool = True
 
     def __init__(self, **kwargs):
         for k, v in kwargs.items():

@@ -51,7 +51,6 @@ class Llama3:
         seed: int = 1,
         device: str | TorchDevice = "cuda",
         use_kv_cache: bool = True,
-        enable_sync: bool = True,
     ):
         if device is not Device:
             device = torch.device(device)
@@ -97,11 +96,10 @@ class Llama3:
             params = json.loads(f.read())
 
         model_args: ModelArgs = ModelArgs(
-            me = me,
+            me=me,
             max_seq_len=max_seq_len,
             max_batch_size=max_batch_size,
             use_kv_cache=use_kv_cache,
-            enable_sync=enable_sync,
             **params,
         )
         tokenizer = Tokenizer.get_instance()
@@ -153,9 +151,8 @@ class Llama3:
         self.gen_cache.append(msg)
 
     def send_sync_gen(self, pos: int, next_token: torch.Tensor):
-        if self.args.enable_sync:
-            msg = SyncGen(pos=pos, next_token=next_token)
-            self.args.me.send("gen", msg)
+        msg = SyncGen(pos=pos, next_token=next_token)
+        self.args.me.send("gen", msg)
 
     def clean_cache(self):
         if isinstance(self.model, Transformer):
@@ -236,10 +233,27 @@ class Llama3:
             tokens[:, elem.pos] = elem.next_token
             prev_pos = elem.pos
 
+        me = self.args.me
+        world = me.world
+
         for cur_pos in range(max(min_prompt_len, prev_pos + 1), total_len):
             if self.model.use_kv_cache:
+                world.chan("pre_processed_input").broadcast(
+                    me,
+                    {
+                        "tokens": tokens[:, prev_pos:cur_pos],
+                        "prev_pos": prev_pos,
+                    },
+                )
                 logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             else:
+                world.chan("pre_processed_input").broadcast(
+                    me,
+                    {
+                        "tokens": tokens[:, :cur_pos],
+                        "prev_pos": prev_pos,
+                    },
+                )
                 logits = self.model.forward(tokens[:, :cur_pos], prev_pos)
 
             if logits_processor is not None:
@@ -255,7 +269,6 @@ class Llama3:
             # only replace token if prompt has already been generated
             next_token = torch.where(input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token)
             tokens[:, cur_pos] = next_token
-            self.send_sync_gen(cur_pos, next_token)
 
             target = tokens[:, prev_pos + 1 : cur_pos + 1]
 
@@ -285,6 +298,9 @@ class Llama3:
             prev_pos = cur_pos
             if all(eos_reached):
                 break
+
+        # Termination signal
+        world.chan("pre_processed_input").all_gather(me, None)
 
     def completion(
         self,
@@ -330,6 +346,17 @@ class Llama3:
             yield result
             if all(r.finished for r in result):
                 break
+
+    def serve_forever(self):
+        me = self.args.me
+        world = me.world
+
+        while (pre_processed_input := world.chan("pre_processed_input").broadcast(me, None)) is not None:
+            tokens = pre_processed_input["tokens"]
+            prev_pos = pre_processed_input["prev_pos"]
+            self.model.forward(tokens, prev_pos)
+
+        print("Serve ended")
 
 
 def sample_top_p(probs, p):

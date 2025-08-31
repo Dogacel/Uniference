@@ -42,13 +42,13 @@ const currentTimeValue = document.getElementById('currentTimeValue');
 // Remove old speed control (if present)
 if (speedControl) speedControl.parentNode.removeChild(speedControl);
 
-// Logarithmic speed mapping: slider 0-100 maps to 0.001x - 1x
+// Logarithmic speed mapping: slider 0-100 maps to 0.001x - 10x
 function sliderToSpeed(sliderVal) {
     if (sliderVal == 0) {
         return 0;
     }
-    // log10(0.001) = -3, log10(1) = 0
-    let min = -3, max = 0;
+    // log10(0.001) = -3, log10(10) = 1
+    let min = -3, max = 1;
     let logSpeed = min + (max - min) * (sliderVal / 10_000);
     return Math.pow(10, logSpeed);
 }
@@ -238,8 +238,7 @@ function renderAtTime(us) {
                     graph.setEdgeAttribute(ev.id, "color", stateColors[state]);
                 }
 
-                const key = graph.edge(ev.device, ev.chan);
-                setPacketPercent(key, 1 - (Math.abs(progress - 50) / 50));
+                setPacketPercent(ev.id, 1 - (Math.abs(progress - 50) / 50));
             }
 
             if (ev.action === 'desynchronize') {

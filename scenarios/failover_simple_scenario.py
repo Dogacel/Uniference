@@ -12,7 +12,6 @@ from simsuite.world import World
 
 world = World()
 
-
 phone_spec = DeviceSpec(flops=24 * TFLOPs, mem=8 * GB, max_bandwidth=5 * Gbps, inherent_latency=10 * ms)
 
 phone = world.device(

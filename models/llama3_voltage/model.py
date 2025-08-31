@@ -8,7 +8,6 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed in accordance with the terms of the Llama 3 Community License Agreement.
 
-from ptflops.pytorch_engine import accumulate_flops
 from simsuite.chan import SyncKVCache
 import math
 from typing import Optional, Tuple
@@ -43,6 +42,41 @@ class RMSNorm(torch.nn.Module):
     def forward(self, x):
         output = self._norm(x.float()).type_as(x)
         return output * self.weight
+
+
+def unstride_torch(shards: list[Tensor], dim: int = 0) -> Tensor:
+    """Inverse of x[... , r::total, ...] along `dim` (r = 0..total-1)."""
+    if not shards:
+        raise ValueError("shards is empty")
+    total = len(shards)
+    dim = dim % shards[0].ndim
+
+    # All non-sharded dims must match
+    ref = shards[0].shape
+    for s in shards:
+        if s.ndim != len(ref):
+            raise ValueError("rank mismatch across shards")
+        if any(i != dim and s.shape[i] != ref[i] for i in range(s.ndim)):
+            raise ValueError("non-sharded dimensions differ across shards")
+
+    # Output shape
+    N = sum(s.shape[dim] for s in shards)
+    out_shape = list(ref)
+    out_shape[dim] = N
+    out = shards[0].new_empty(out_shape)
+
+    # Optional sanity check: each shard must fit the r, r+total, ... slots
+    for r, s in enumerate(shards):
+        slots = (N - r + total - 1) // total  # ceil((N - r)/total)
+        if s.shape[dim] != slots:
+            raise ValueError(
+                f"shard {r} has length {s.shape[dim]} on dim={dim}, "
+                f"expected {slots} for total={total}, N={N}"
+            )
+        idx = [slice(None)] * out.ndim
+        idx[dim] = slice(r, None, total)
+        out[tuple(idx)] = s
+    return out
 
 
 def apply_scaling(freqs: torch.Tensor) -> torch.Tensor:
@@ -86,13 +120,15 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
 def apply_rotary_emb(
     xq: torch.Tensor,
     xk: torch.Tensor,
-    freqs_cis: torch.Tensor,
+    freqs_cis_xq: torch.Tensor,
+    freqs_cis_xk: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
     xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-    freqs_cis = reshape_for_broadcast(freqs_cis, xq_)
-    xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3)
-    xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3)
+    freqs_cis_xq = reshape_for_broadcast(freqs_cis_xq, xq_)
+    freqs_cis_xk = reshape_for_broadcast(freqs_cis_xk, xk_)
+    xq_out = torch.view_as_real(xq_ * freqs_cis_xq).flatten(3)
+    xk_out = torch.view_as_real(xk_ * freqs_cis_xk).flatten(3)
     return xq_out.type_as(xq), xk_out.type_as(xk)
 
 
@@ -119,7 +155,6 @@ class Attention(nn.Module):
         self.head_dim = args.dim // args.n_heads
         self.me = args.me
         self.layer_id = layer_id
-        self.enable_sync = args.enable_sync
 
         self.wq = ColumnParallelLinear(
             args.dim,
@@ -187,23 +222,32 @@ class Attention(nn.Module):
         freqs_cis: torch.Tensor,
         mask: Optional[torch.Tensor],
     ):
-        bsz, seqlen, _ = x.shape
-        xq, xk, xv = self.wq(x), self.wk(x), self.wv(x)
+        me = self.me
+        world = me.world
+        forward_chan = world.chan("forward")
+        rank = forward_chan.rank(me)
+        total = len(forward_chan.subscribers)
 
-        xq = xq.view(bsz, seqlen, self.n_local_heads, self.head_dim)
+        # Partition the input matrix x based on rank and total
+        xp = torch.tensor_split(x, total, dim=1)[rank]
+
+        bsz, seqlen, _ = x.shape
+        bsz_p, seqlen_p, _ = xp.shape
+        xq, xk, xv = self.wq(xp), self.wk(x), self.wv(x)
+
+        xq = xq.view(bsz_p, seqlen_p, self.n_local_heads, self.head_dim)
         xk = xk.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
         xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
 
-        xq, xk = apply_rotary_emb(xq, xk, freqs_cis=freqs_cis)
+        freqs_cis_xq = torch.tensor_split(freqs_cis, total, dim=0)[rank]
+        freqs_cis_xk = freqs_cis
+        xq, xk = apply_rotary_emb(xq, xk, freqs_cis_xq=freqs_cis_xq, freqs_cis_xk=freqs_cis_xk)
 
         if self.use_kv_cache:
             self.cache_k = self.cache_k.to(xq)
             self.cache_v = self.cache_v.to(xq)
 
-            if self.cache_known[start_pos : start_pos + seqlen].sum() != seqlen:
-                self.insert_cache_value(start_pos, xk, xv)
-                if self.enable_sync:
-                    self.me.send("cache", SyncKVCache(layer_id=self.layer_id, start_pos=start_pos, xk=xk, xv=xv))
+            self.insert_cache_value(start_pos, xk, xv)
 
             keys = self.cache_k[:bsz, : start_pos + seqlen]
             values = self.cache_v[:bsz, : start_pos + seqlen]
@@ -215,15 +259,15 @@ class Attention(nn.Module):
         keys = repeat_kv(keys, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
         values = repeat_kv(values, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
 
-        xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen, head_dim)
+        xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen_p, head_dim)
         keys = keys.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
         values = values.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
         scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
         if mask is not None:
-            scores = scores + mask  # (bs, n_local_heads, seqlen, cache_len + seqlen)
+            scores = scores + mask  # (bs, n_local_heads, seqlen_p, cache_len + seqlen)
         scores = F.softmax(scores.float(), dim=-1).type_as(xq)
-        output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen, head_dim)
-        output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
+        output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen_p, head_dim)
+        output = output.transpose(1, 2).contiguous().view(bsz_p, seqlen_p, -1)
 
         return self.wo(output)
 
@@ -267,6 +311,7 @@ class TransformerBlock(nn.Module):
         self.layer_id = layer_id
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
+        self.me = args.me
 
     def sync_kv_cache(self, start_pos: int, xk: Tensor, xv):
         self.attention.insert_cache_value(start_pos, xk, xv)
@@ -281,7 +326,14 @@ class TransformerBlock(nn.Module):
         freqs_cis: torch.Tensor,
         mask: Optional[torch.Tensor],
     ):
-        h = x + self.attention(self.attention_norm(x), start_pos, freqs_cis, mask)
+        me = self.me
+        world = me.world
+        forward_chan = world.chan("forward")
+        rank = forward_chan.rank(me)
+        total = len(forward_chan.subscribers)
+        xp = torch.tensor_split(x, total, dim=1)[rank]
+
+        h = xp + self.attention(self.attention_norm(x), start_pos, freqs_cis, mask)
         out = h + self.feed_forward(self.ffn_norm(h))
         return out
 
@@ -301,6 +353,7 @@ class Transformer(nn.Module):
 
         self.norm = RMSNorm(params.dim, eps=params.norm_eps)
         self.output = ColumnParallelLinear(params.dim, params.vocab_size, bias=False, init_method=lambda x: x)
+        self.me = params.me
 
         self.freqs_cis = precompute_freqs_cis(
             params.dim // params.n_heads,
@@ -310,6 +363,7 @@ class Transformer(nn.Module):
         )
 
         self.use_kv_cache = params.use_kv_cache
+        self.me = params.me
 
     def sync_kv_cache(self, layer_id: int, start_pos: int, xk: Tensor, xv: Tensor):
         layer = self.layers[layer_id]
@@ -335,9 +389,16 @@ class Transformer(nn.Module):
         else:
             freqs_cis = self.freqs_cis[:seqlen]
 
+        me = self.me
+        world = me.world
+        forward_chan = world.chan("forward")
+        rank = forward_chan.rank(me)
+        total = len(forward_chan.subscribers)
+        _, mask_seqlen = torch.tensor_split(tokens, total, dim=1)[rank].shape
+
         mask = None
-        if seqlen > 1:
-            mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device)
+        if mask_seqlen > 1:
+            mask = torch.full((mask_seqlen, seqlen), float("-inf"), device=tokens.device)
 
             mask = torch.triu(mask, diagonal=1)
 
@@ -352,12 +413,15 @@ class Transformer(nn.Module):
             # (seqlen, cache_len + seqlen), and the only masked entries are (i, j) for
             # j > cache_len + i, since row i corresponds to token cache_len + i.
             if self.use_kv_cache:
-                mask = torch.hstack([torch.zeros((seqlen, start_pos), device=tokens.device), mask]).type_as(h)
+                mask = torch.hstack([torch.zeros((mask_seqlen, start_pos), device=tokens.device), mask]).type_as(h)
             else:
                 mask = mask.to(tokens.device)
 
         for layer in self.layers:
             h = layer(h, start_pos, freqs_cis, mask)
+            h = world.chan("forward").all_gather(me, h)
+            h = torch.cat(h, dim=1)
+
         h = self.norm(h)
         output = self.output(h).float()
         return output
