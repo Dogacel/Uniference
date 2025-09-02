@@ -70,8 +70,7 @@ def unstride_torch(shards: list[Tensor], dim: int = 0) -> Tensor:
         slots = (N - r + total - 1) // total  # ceil((N - r)/total)
         if s.shape[dim] != slots:
             raise ValueError(
-                f"shard {r} has length {s.shape[dim]} on dim={dim}, "
-                f"expected {slots} for total={total}, N={N}"
+                f"shard {r} has length {s.shape[dim]} on dim={dim}, expected {slots} for total={total}, N={N}"
             )
         idx = [slice(None)] * out.ndim
         idx[dim] = slice(r, None, total)
@@ -394,12 +393,10 @@ class Transformer(nn.Module):
         forward_chan = world.chan("forward")
         rank = forward_chan.rank(me)
         total = len(forward_chan.subscribers)
-        _, mask_seqlen = torch.tensor_split(tokens, total, dim=1)[rank].shape
 
         mask = None
-        if mask_seqlen > 1:
-            mask = torch.full((mask_seqlen, seqlen), float("-inf"), device=tokens.device)
-
+        if seqlen > 1:
+            mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device)
             mask = torch.triu(mask, diagonal=1)
 
             # https://github.com/pytorch/pytorch/issues/100005
@@ -413,9 +410,14 @@ class Transformer(nn.Module):
             # (seqlen, cache_len + seqlen), and the only masked entries are (i, j) for
             # j > cache_len + i, since row i corresponds to token cache_len + i.
             if self.use_kv_cache:
-                mask = torch.hstack([torch.zeros((mask_seqlen, start_pos), device=tokens.device), mask]).type_as(h)
+                mask = torch.hstack([torch.zeros((seqlen, start_pos), device=tokens.device), mask]).type_as(h)
             else:
                 mask = mask.to(tokens.device)
+
+            splits = torch.tensor_split(torch.arange(seqlen), total)
+            partition_start = splits[rank][0].item()
+            partition_end = splits[rank][-1].item() + 1  # +1 because slicing is exclusive
+            mask = mask[partition_start:partition_end, :]
 
         for layer in self.layers:
             h = layer(h, start_pos, freqs_cis, mask)
