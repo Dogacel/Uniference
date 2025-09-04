@@ -1,5 +1,6 @@
+from typing import Literal
 import fire
-from simsuite.device import DeviceArgs
+from programs.voltage_better_program import VoltageBetterProgram
 from programs.voltage_program import VoltageProgram
 from models.datatypes import RawMessage
 from simsuite.network import NetworkArgs
@@ -7,6 +8,7 @@ from simsuite.units import TFLOPs
 from simsuite.units import ms
 from simsuite.units import Gbps
 from simsuite.units import GB
+from simsuite.device import DeviceArgs
 from simsuite.device import DeviceSpec
 from simsuite.world import World
 
@@ -14,6 +16,7 @@ from simsuite.world import World
 def run(
     device_count: int,
     prompt: str,
+    program: Literal["voltage", "experiment"],
     **kwargs,
 ):
     world = World()
@@ -25,7 +28,7 @@ def run(
         is_client = i == 0
         device = world.device(
             deviceArgs=DeviceArgs(spec=device_spec, client=is_client, name=f"phone_{i + 1}"),
-            program=VoltageProgram(),
+            program=VoltageProgram() if program == "voltage" else VoltageBetterProgram(),
         )
 
         if is_client:

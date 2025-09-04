@@ -14,5 +14,5 @@ uv run python -m $TARGET_SCENARIO \
   --max_seq_len 512 \
   --temperature 0.6 \
   --top_p 0.9 \
-  --max_batch_size 4 \
+  --max_batch_size 1 \
   "${EXTRA_ARGS[@]}"

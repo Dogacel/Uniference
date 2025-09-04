@@ -72,6 +72,8 @@ class World:
         return network
 
     def latency_between(self, device: Device, other_device: Device, transfer_size: float = 0) -> float:
+        if device == other_device:
+            return 0.0
         connections = [conn for conn in self.networks if device in conn.devices and other_device in conn.devices]
         if connections:
             return min(conn.latency for conn in connections) + (
@@ -176,10 +178,9 @@ class World:
                     deadlock_graph.remove(device)
 
                 self.event_logger.log_event({"device": device.name, "action": "running", "time": state.clock})
-                start_time = perf_counter()
+                state.last_run_time = perf_counter()
                 g.switch()
-                end_time = perf_counter()
-                state.clock += end_time - start_time
+                state.sync_clock()
                 self.event_logger.log_event({"device": device.name, "action": "idle", "time": state.clock})
                 self.max_time = max(self.max_time, state.clock)
             else:

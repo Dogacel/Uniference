@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from time import perf_counter
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -36,6 +37,17 @@ class DeviceState:
     Current time perception for the device.
     """
     clock: float = 0.0
+
+    """
+    Last time the device was run. This information is used to move clock forward.
+    """
+    last_run_time: float = 0.0
+
+    def sync_clock(self) -> float:
+        now = perf_counter()
+        self.clock += (now - self.last_run_time)
+        self.last_run_time = now
+        return self.clock
 
 
 class Device:

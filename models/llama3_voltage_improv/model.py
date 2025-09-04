@@ -8,8 +8,10 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed in accordance with the terms of the Llama 3 Community License Agreement.
 
+from time import perf_counter, sleep
+from simsuite.chan import SyncKVCache
 import math
-from typing import Optional, Tuple
+from typing import Any, Literal, Optional, Tuple
 
 import fairscale.nn.model_parallel.initialize as fs_init
 import torch
@@ -36,7 +38,8 @@ class RMSNorm(torch.nn.Module):
         self.weight = nn.Parameter(torch.ones(dim))
 
     def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        res = torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+        return x * res
 
     def forward(self, x):
         output = self._norm(x.float()).type_as(x)
@@ -76,6 +79,26 @@ def unstride_torch(shards: list[Tensor], dim: int = 0) -> Tensor:
         out[tuple(idx)] = s
     return out
 
+def debug_print(*args, **kwargs):
+    if True:
+        print(*args, **kwargs)
+
+class PerfDebug:
+    def __init__(self, title: str):
+        self.title = title
+        self.start_time = 0.0
+        self.end_time = 0.0
+
+    def __enter__(self):
+        self.start_time = perf_counter()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.end_time = perf_counter()
+        debug_print(f"{self.title}: {(self.end_time - self.start_time) * 1000:.2f} ms")
+
+def perf_debug(title: str):
+    return PerfDebug(title)
 
 def apply_scaling(freqs: torch.Tensor) -> torch.Tensor:
     # Values obtained from grid search
@@ -115,19 +138,10 @@ def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
     return freqs_cis.view(*shape)
 
 
-def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    freqs_cis_xq: torch.Tensor,
-    freqs_cis_xk: torch.Tensor,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
-    xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
-    freqs_cis_xq = reshape_for_broadcast(freqs_cis_xq, xq_)
-    freqs_cis_xk = reshape_for_broadcast(freqs_cis_xk, xk_)
-    xq_out = torch.view_as_real(xq_ * freqs_cis_xq).flatten(3)
-    xk_out = torch.view_as_real(xk_ * freqs_cis_xk).flatten(3)
-    return xq_out.type_as(xq), xk_out.type_as(xk)
+def apply_rotary_emb(x: torch.Tensor, freqs_cis: torch.Tensor) -> torch.Tensor:
+    x = torch.view_as_complex(x.float().reshape(*x.shape[:-1], -1, 2))
+    freqs_cis = reshape_for_broadcast(freqs_cis, x)
+    return torch.view_as_real(x * freqs_cis).flatten(3)
 
 
 def repeat_kv(x: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -213,59 +227,77 @@ class Attention(nn.Module):
     def clean_cache(self):
         self.cache_known.zero_()
 
+    def calculate_xq(
+        self,
+        xp: torch.Tensor,
+        freqs_cis_xq: torch.Tensor,
+    ) -> torch.Tensor:
+        bsz_p, seqlen_p, _ = xp.shape
+        xq = self.wq(xp)
+        xq = xq.view(bsz_p, seqlen_p, self.n_local_heads, self.head_dim)
+        xq = apply_rotary_emb(xq, freqs_cis=freqs_cis_xq)
+        return xq
+
+    def calculate_keys(
+        self,
+        x: torch.Tensor,
+        freqs_cis_xk: torch.Tensor,
+    ) -> torch.Tensor:
+        bsz, seqlen, _ = x.shape
+        xk = self.wk(x)
+        xk = xk.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
+        xk = apply_rotary_emb(xk, freqs_cis=freqs_cis_xk)
+        return xk
+
+    def calculate_values(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+        bsz, seqlen, _ = x.shape
+        xv = self.wv(x)
+        xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
+        return xv
+
     def forward(
         self,
         x: torch.Tensor,
-        start_pos: int,
+        xq: torch.Tensor,
+        keys: torch.Tensor,
+        values: torch.Tensor,
         freqs_cis: torch.Tensor,
         mask: Optional[torch.Tensor],
+        mode: Literal["attention", "xq", "keys", "values"] = "attention",
     ):
-        me = self.me
-        world = me.world
-        forward_chan = world.chan("forward")
-        rank = forward_chan.rank(me)
-        total = len(forward_chan.subscribers)
-
-        # Partition the input matrix x based on rank and total
-        xp = torch.tensor_split(x, total, dim=1)[rank]
-
-        bsz, seqlen, _ = x.shape
-        bsz_p, seqlen_p, _ = xp.shape
-        xq, xk, xv = self.wq(xp), self.wk(x), self.wv(x)
-
-        xq = xq.view(bsz_p, seqlen_p, self.n_local_heads, self.head_dim)
-        xk = xk.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
-        xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
-
-        freqs_cis_xq = torch.tensor_split(freqs_cis, total, dim=0)[rank]
-        freqs_cis_xk = freqs_cis
-        xq, xk = apply_rotary_emb(xq, xk, freqs_cis_xq=freqs_cis_xq, freqs_cis_xk=freqs_cis_xk)
-
-        if self.use_kv_cache:
-            self.cache_k = self.cache_k.to(xq)
-            self.cache_v = self.cache_v.to(xq)
-
-            self.insert_cache_value(start_pos, xk, xv)
-
-            keys = self.cache_k[:bsz, : start_pos + seqlen]
-            values = self.cache_v[:bsz, : start_pos + seqlen]
-        else:
-            keys = xk
-            values = xv
+        if mode == "xq":
+            return self.calculate_xq(x, freqs_cis)
+        elif mode == "keys":
+            return self.calculate_keys(x, freqs_cis)
+        elif mode == "values":
+            return self.calculate_values(x)
 
         # repeat k/v heads if n_kv_heads < n_heads
         keys = repeat_kv(keys, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
         values = repeat_kv(values, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
 
+        bsz_xq, seqlen_xq, _, _ = xq.shape
+
         xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen_p, head_dim)
         keys = keys.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
         values = values.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
-        scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
+
+        with perf_debug(f"{self.me.name} attention scores"):
+            scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
+
         if mask is not None:
             scores = scores + mask  # (bs, n_local_heads, seqlen_p, cache_len + seqlen)
-        scores = F.softmax(scores.float(), dim=-1).type_as(xq)
-        output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen_p, head_dim)
-        output = output.transpose(1, 2).contiguous().view(bsz_p, seqlen_p, -1)
+
+        with perf_debug(f"{self.me.name} attention softmax"):
+            scores = F.softmax(scores.float(), dim=-1).type_as(values)
+
+        with perf_debug(f"{self.me.name} attention output"):
+            output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen_p, head_dim)
+
+        output = output.transpose(1, 2).contiguous().view(bsz_xq, seqlen_xq, -1)
 
         return self.wo(output)
 
@@ -311,29 +343,50 @@ class TransformerBlock(nn.Module):
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.me = args.me
 
-    def sync_kv_cache(self, start_pos: int, xk: Tensor, xv):
-        self.attention.insert_cache_value(start_pos, xk, xv)
-
-    def clean_cache(self):
-        self.attention.clean_cache()
-
     def forward(
         self,
         x: torch.Tensor,
-        start_pos: int,
         freqs_cis: torch.Tensor,
         mask: Optional[torch.Tensor],
+        all_gather_token: Optional[Any],
     ):
         me = self.me
         world = me.world
         forward_chan = world.chan("forward")
         rank = forward_chan.rank(me)
         total = len(forward_chan.subscribers)
-        xp = torch.tensor_split(x, total, dim=1)[rank]
 
-        h = xp + self.attention(self.attention_norm(x), start_pos, freqs_cis, mask)
-        out = h + self.feed_forward(self.ffn_norm(h))
-        return out
+        if all_gather_token is None:
+            xp = torch.tensor_split(x, total, dim=1)[rank]
+        else:
+            xp = x
+
+        with perf_debug(f"{self.me.name} attention xq"):
+            xp_norm = self.attention_norm(xp)
+            freqs_cis_xq = torch.tensor_split(freqs_cis, total, dim=0)[rank]
+            xq = self.attention(xp_norm, None, None, None, freqs_cis_xq, None, mode="xq")
+
+        if all_gather_token is not None:
+            real_x = forward_chan.all_gather_async_await(all_gather_token)
+            x = torch.cat(real_x, dim=1)
+
+        x_norm = self.attention_norm(x)
+
+        with perf_debug(f"{self.me.name} attention keys"):
+            keys = self.attention(x_norm, None, None, None, freqs_cis, None, mode="keys")
+
+        with perf_debug(f"{self.me.name} attention values"):
+            values = self.attention(x_norm, None, None, None, freqs_cis, None, mode="values")
+
+        with perf_debug(f"{self.me.name} xp + attention"):
+            h = xp + self.attention(x_norm, xq, keys, values, freqs_cis, mask, mode="attention")
+
+        with perf_debug(f"{self.me.name} feed forward"):
+            out = h + self.feed_forward(self.ffn_norm(h))
+
+        all_gather_token = forward_chan.all_gather_async(me, out)
+
+        return out, all_gather_token
 
 
 class Transformer(nn.Module):
@@ -363,29 +416,13 @@ class Transformer(nn.Module):
         self.use_kv_cache = params.use_kv_cache
         self.me = params.me
 
-    def sync_kv_cache(self, layer_id: int, start_pos: int, xk: Tensor, xv: Tensor):
-        layer = self.layers[layer_id]
-
-        if isinstance(layer, TransformerBlock):
-            layer.sync_kv_cache(start_pos, xk, xv)
-        else:
-            raise TypeError(f"Layer {layer_id} is not a TransformerBlock, but {type(layer)}")
-
-    def clean_cache(self):
-        for layer in self.layers:
-            if isinstance(layer, TransformerBlock):
-                layer.clean_cache()
-
     @torch.inference_mode()
     def forward(self, tokens: torch.Tensor, start_pos: int):
         _bsz, seqlen = tokens.shape
         h = self.tok_embeddings(tokens)
         self.freqs_cis = self.freqs_cis.to(h.device)
 
-        if self.use_kv_cache:
-            freqs_cis = self.freqs_cis[start_pos : start_pos + seqlen]
-        else:
-            freqs_cis = self.freqs_cis[:seqlen]
+        freqs_cis = self.freqs_cis[:seqlen]
 
         me = self.me
         world = me.world
@@ -418,10 +455,12 @@ class Transformer(nn.Module):
             partition_end = splits[rank][-1].item() + 1  # +1 because slicing is exclusive
             mask = mask[partition_start:partition_end, :]
 
+        all_gather_token = None
         for layer in self.layers:
-            h = layer(h, start_pos, freqs_cis, mask)
-            h = world.chan("forward").all_gather(me, h)
-            h = torch.cat(h, dim=1)
+            h, all_gather_token = layer(h, freqs_cis, mask, all_gather_token=all_gather_token)
+
+        h = forward_chan.all_gather_async_await(all_gather_token)
+        h = torch.cat(h, dim=1)
 
         h = self.norm(h)
         output = self.output(h).float()

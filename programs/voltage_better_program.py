@@ -6,7 +6,7 @@ import fire
 from termcolor import cprint
 
 from models.datatypes import RawMessage
-from models.llama3_voltage.generation import Llama3
+from models.llama3_voltage_improv.generation import Llama3
 
 import os
 import torch
@@ -22,7 +22,7 @@ def get_device():
     return "cpu"
 
 
-class VoltageProgram(Program):
+class VoltageBetterProgram(Program):
     def __init__(self):
         super().__init__()
         self.model: Llama3
@@ -102,6 +102,7 @@ class VoltageProgram(Program):
                 )
                 cprint(result.text, color="yellow", end="", flush=True)
 
+                # Benchmark with a constant number of tokens
                 if result.finished or generated_token_count >= self.max_tokens:
                     # Termination signal
                     world.chan("pre_processed_input").all_gather(me, None)
@@ -118,6 +119,5 @@ class VoltageProgram(Program):
             for msg in input:
                 print(f"{msg.role.capitalize()}: {msg.content}\n")
                 evaluate(model, [msg])
-                model.clean_cache()
         else:
             model.serve_forever()

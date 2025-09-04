@@ -62,8 +62,9 @@ class Chan:
         self.subscribers.remove(device)
 
     def synchronize(self, me: Device):
+        time = me.state.sync_clock()
         max_latency = max(self.world.latency_between(me, sub) for sub in self.subscribers)
-        item = ChanItem(data=len(self.sync_points), time=me.state.clock + max_latency, id=str(uuid.uuid4()))
+        item = ChanItem(data=len(self.sync_points), time=time + max_latency, id=str(uuid.uuid4()))
         self.queue.append(item)
         self.world.add_dependency(
             me,
@@ -79,7 +80,7 @@ class Chan:
                 "chan": self.name,
                 "action": "synchronize",
                 "device": me.name,
-                "time": me.state.clock,
+                "time": time,
                 "arrive_at": item.time,
                 "id": item.id,
             }
@@ -114,12 +115,70 @@ class Chan:
                 return item
         return None
 
+    def all_gather_async(self, me: Device, my_share: Any) -> Any:
+        """
+        Gathers all shares from subscribers and returns them as a list.
+        """
+        my_order = self.rank(me)
+        clock = me.state.sync_clock()
+        round = self._all_gather_rounds[me]
+        self._all_gather_rounds[me] = (self._all_gather_rounds[me] + 1) % 2
+        next_round = self._all_gather_rounds[me]
+
+        latency = max([self.world.latency_between(me, sub) for sub in self.subscribers]) if self.subscribers else 0
+
+        self._all_gathers[round].append(
+            self.GatherItem(
+                order=my_order,
+                arrive_at=clock + latency,
+                item=deepcopy(my_share),
+            )
+        )
+
+        self.world.event_logger.log_event(
+            {
+                "chan": self.name,
+                "action": "send",
+                "device": me.name if me else "user",
+                "time": clock,
+                "arrive_at": clock + latency,
+                "id": str(uuid.uuid4()),
+            }
+        )
+
+        return {"me": me, "round": round, "next_round": next_round}
+
+    def all_gather_async_await(self, wait_token) -> list[Any]:
+        me = wait_token["me"]
+        round = wait_token["round"]
+        next_round = wait_token["next_round"]
+
+        self.world.add_dependency(
+            me,
+            Dependency(
+                condition=lambda: len(self.subscribers) == len(self._all_gathers[round]),
+                time=lambda: max(item.arrive_at for item in self._all_gathers[round]),
+            ),
+        )
+
+        self.world.xyield(f"chan {self.name} all_gather_async_await()")
+
+        # Round completed, reset checkpoints
+        if len(self._all_gathers[next_round]) == len(self.subscribers):
+            self._all_gathers[next_round] = []
+
+        gathered = [None for _ in self.subscribers]
+        for item in self._all_gathers[round]:
+            gathered[item.order] = item.item
+
+        return gathered
+
     def all_gather(self, me: Device, my_share: Any) -> list[Any]:
         """
         Gathers all shares from subscribers and returns them as a list.
         """
         my_order = self.rank(me)
-        clock = me.state.clock
+        clock = me.state.sync_clock()
         round = self._all_gather_rounds[me]
         self._all_gather_rounds[me] = (self._all_gather_rounds[me] + 1) % 2
         next_round = self._all_gather_rounds[me]
@@ -167,6 +226,7 @@ class Chan:
         return gathered
 
     def receive(self, me: Device) -> Any:
+        time = me.state.sync_clock()
         self.world.add_dependency(
             me,
             Dependency(
@@ -180,7 +240,7 @@ class Chan:
                 "chan": self.name,
                 "action": "receive",
                 "device": me.name,
-                "time": me.state.clock,
+                "time": time,
                 "arrive_at": self.queue[0].time,
                 "id": self.queue[0].id,
             }
@@ -190,7 +250,7 @@ class Chan:
 
     def send(self, clock: float, data: Any, me: Optional[Device] = None):
         with self._lock:
-            # TODO: Send should direclty route to some device, otherwise it is impossible to calculate latency.
+            # TODO: Send should directly route to some device, otherwise it is impossible to calculate latency.
             if not me or not self.subscribers:
                 latency = 0
             else:
