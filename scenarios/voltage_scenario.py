@@ -40,7 +40,7 @@ def run(
         NetworkArgs(
             devices=devices,
             bandwidth=5 * Gbps,
-            latency=10 * ms,
+            latency=5 * ms,
         )
     )
 

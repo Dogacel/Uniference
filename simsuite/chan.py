@@ -174,54 +174,8 @@ class Chan:
         return gathered
 
     def all_gather(self, me: Device, my_share: Any) -> list[Any]:
-        """
-        Gathers all shares from subscribers and returns them as a list.
-        """
-        my_order = self.rank(me)
-        clock = me.state.sync_clock()
-        round = self._all_gather_rounds[me]
-        self._all_gather_rounds[me] = (self._all_gather_rounds[me] + 1) % 2
-        next_round = self._all_gather_rounds[me]
-
-        # TODO: Maybe optimize all_gather by replicating to a device which has less latency?
-        latency = max([self.world.latency_between(me, sub) for sub in self.subscribers]) if self.subscribers else 0
-
-        self._all_gathers[round].append(
-            self.GatherItem(
-                order=my_order,
-                arrive_at=clock + latency,
-                item=deepcopy(my_share),
-            )
-        )
-
-        self.world.add_dependency(
-            me,
-            Dependency(
-                condition=lambda: len(self.subscribers) == len(self._all_gathers[round]),
-                time=lambda: max(item.arrive_at for item in self._all_gathers[round]),
-            ),
-        )
-
-        self.world.event_logger.log_event(
-            {
-                "chan": self.name,
-                "action": "send",
-                "device": me.name if me else "user",
-                "time": clock,
-                "arrive_at": clock + latency,
-                "id": str(uuid.uuid4()),
-            }
-        )
-
-        self.world.xyield(f"chan {self.name} all_gather()")
-
-        # Round completed, reset checkpoints
-        if len(self._all_gathers[next_round]) == len(self.subscribers):
-            self._all_gathers[next_round] = []
-
-        gathered = [None for _ in self.subscribers]
-        for item in self._all_gathers[round]:
-            gathered[item.order] = item.item
+        wait_token = self.all_gather_async(me, my_share)
+        gathered = self.all_gather_async_await(wait_token)
 
         return gathered
 

@@ -1,4 +1,5 @@
 from simsuite.device import Device
+from simsuite.profiler import TorchProfiler
 from simsuite.world import Program
 from typing import Optional
 
@@ -74,50 +75,51 @@ class VoltageBetterProgram(Program):
         )
 
     def run(self) -> None:
-        world = self.me.world
-        me = self.me
-        model = self.model
+        with TorchProfiler(out_dir="profile_out", trace_name="decorator-demo"):
+            world = self.me.world
+            me = self.me
+            model = self.model
 
-        def evaluate(model: Llama3, dialog: list[RawMessage]):
-            batch = [dialog]
+            def evaluate(model: Llama3, dialog: list[RawMessage]):
+                batch = [dialog]
 
-            generated_token_count = 0
+                generated_token_count = 0
 
-            for token_results in model.chat_completion(
-                batch,
-                temperature=self.temperature,
-                top_p=self.top_p,
-                max_gen_len=self.max_seq_len,
-            ):
-                result = token_results[0]
-                generated_token_count += 1
+                for token_results in model.chat_completion(
+                    batch,
+                    temperature=self.temperature,
+                    top_p=self.top_p,
+                    max_gen_len=self.max_seq_len,
+                ):
+                    result = token_results[0]
+                    generated_token_count += 1
 
-                world.event_logger.log_event(
-                    {
-                        "device": me.name,
-                        "action": "generate",
-                        "time": world.device_states[me].clock,
-                        "token": result.text,
-                    }
-                )
-                cprint(result.text, color="yellow", end="", flush=True)
+                    world.event_logger.log_event(
+                        {
+                            "device": me.name,
+                            "action": "generate",
+                            "time": world.device_states[me].clock,
+                            "token": result.text,
+                        }
+                    )
+                    cprint(result.text, color="yellow", end="", flush=True)
 
-                # Benchmark with a constant number of tokens
-                if result.finished or generated_token_count >= self.max_tokens:
-                    # Termination signal
-                    world.chan("pre_processed_input").all_gather(me, None)
-                    break
-            print("\n")
+                    # Benchmark with a constant number of tokens
+                    if result.finished or generated_token_count >= self.max_tokens:
+                        # Termination signal
+                        world.chan("pre_processed_input").all_gather(me, None)
+                        break
+                print("\n")
 
-        world.chan("input").subscribe(me)
-        world.chan("pre_processed_input").subscribe(me)
-        world.chan("forward").subscribe(me)
-        world.chan("logits").subscribe(me)
+            world.chan("input").subscribe(me)
+            world.chan("pre_processed_input").subscribe(me)
+            world.chan("forward").subscribe(me)
+            world.chan("logits").subscribe(me)
 
-        if me.client:
-            input: list[RawMessage] = world.chan("input").receive(me)
-            for msg in input:
-                print(f"{msg.role.capitalize()}: {msg.content}\n")
-                evaluate(model, [msg])
-        else:
-            model.serve_forever()
+            if me.client:
+                input: list[RawMessage] = world.chan("input").receive(me)
+                for msg in input:
+                    print(f"{msg.role.capitalize()}: {msg.content}\n")
+                    evaluate(model, [msg])
+            else:
+                model.serve_forever()

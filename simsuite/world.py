@@ -3,15 +3,18 @@ from __future__ import annotations
 import torch
 
 from time import perf_counter
-from typing import TYPE_CHECKING, Optional, Callable, Any
+from typing import Optional, Callable, Any
 from greenlet import greenlet
+from typing_extensions import Literal
 
 from simsuite.chan import Chan
 from simsuite.dependency import Dependency
 from simsuite.device import Device, DeviceArgs, DeviceState
 from simsuite.event_logger import WorldEventLogger
 from simsuite.network import Network, NetworkArgs
+from simsuite.profiler import TorchProfiler
 from simsuite.units import ms
+
 
 class PreparedEvent:
     event_type: str
@@ -34,6 +37,7 @@ class Program:
     def run(self) -> None:
         raise NotImplementedError
 
+world_profiler = TorchProfiler(out_dir="profile_out", trace_name="toynet", use_cuda=True)
 
 class World:
     devices: list[Device]
@@ -156,6 +160,7 @@ class World:
                 state.clock += 1 * ms
                 self.max_time = max(self.max_time, state.clock)
 
+            # If we are at max_time, but not all devices are terminated and have their dependencies met,
             if state.clock == self.max_time and not all(
                 state.clock == self.max_time
                 if not device.terminated and all(dep.condition() for dep in state.dependencies)

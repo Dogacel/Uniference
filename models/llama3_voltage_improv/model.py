@@ -8,10 +8,10 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # This software may be used and distributed in accordance with the terms of the Llama 3 Community License Agreement.
 
-from time import perf_counter, sleep
-from simsuite.chan import SyncKVCache
+from time import perf_counter
 import math
-from typing import Any, Literal, Optional, Tuple
+import os
+from typing import Any, Literal, Optional
 
 import fairscale.nn.model_parallel.initialize as fs_init
 import torch
@@ -23,6 +23,8 @@ from fairscale.nn.model_parallel.layers import (
     VocabParallelEmbedding,
 )
 from torch import nn
+
+from simsuite.profiler import profiled
 
 from .args import ModelArgs
 
@@ -80,7 +82,7 @@ def unstride_torch(shards: list[Tensor], dim: int = 0) -> Tensor:
     return out
 
 def debug_print(*args, **kwargs):
-    if True:
+    if os.environ.get("DEBUG") == "1":
         print(*args, **kwargs)
 
 class PerfDebug:
@@ -227,6 +229,7 @@ class Attention(nn.Module):
     def clean_cache(self):
         self.cache_known.zero_()
 
+    @profiled("Attention.calculate_xq", cuda=False)
     def calculate_xq(
         self,
         xp: torch.Tensor,
@@ -238,6 +241,7 @@ class Attention(nn.Module):
         xq = apply_rotary_emb(xq, freqs_cis=freqs_cis_xq)
         return xq
 
+    @profiled("Attention.calculate_keys", cuda=False)
     def calculate_keys(
         self,
         x: torch.Tensor,
@@ -249,6 +253,7 @@ class Attention(nn.Module):
         xk = apply_rotary_emb(xk, freqs_cis=freqs_cis_xk)
         return xk
 
+    @profiled("Attention.calculate_values", cuda=False)
     def calculate_values(
         self,
         x: torch.Tensor,
@@ -291,11 +296,9 @@ class Attention(nn.Module):
         if mask is not None:
             scores = scores + mask  # (bs, n_local_heads, seqlen_p, cache_len + seqlen)
 
-        with perf_debug(f"{self.me.name} attention softmax"):
-            scores = F.softmax(scores.float(), dim=-1).type_as(values)
+        scores = F.softmax(scores.float(), dim=-1).type_as(values)
 
-        with perf_debug(f"{self.me.name} attention output"):
-            output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen_p, head_dim)
+        output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen_p, head_dim)
 
         output = output.transpose(1, 2).contiguous().view(bsz_xq, seqlen_xq, -1)
 
@@ -372,11 +375,8 @@ class TransformerBlock(nn.Module):
 
         x_norm = self.attention_norm(x)
 
-        with perf_debug(f"{self.me.name} attention keys"):
-            keys = self.attention(x_norm, None, None, None, freqs_cis, None, mode="keys")
-
-        with perf_debug(f"{self.me.name} attention values"):
-            values = self.attention(x_norm, None, None, None, freqs_cis, None, mode="values")
+        keys = self.attention(x_norm, None, None, None, freqs_cis, None, mode="keys")
+        values = self.attention(x_norm, None, None, None, freqs_cis, None, mode="values")
 
         with perf_debug(f"{self.me.name} xp + attention"):
             h = xp + self.attention(x_norm, xq, keys, values, freqs_cis, mask, mode="attention")

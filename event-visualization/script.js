@@ -317,10 +317,6 @@ function renderAtTime(us) {
             <div class="state ${d.state}">${d.state.toUpperCase()}</div>
             <table class="device-stats-table">
                 <tr>
-                    <td><strong>Last Token:</strong></td>
-                    <td>${d.lastToken}</td>
-                </tr>
-                <tr>
                     <td><strong>Tokens Per Second:</strong></td>
                     <td>${d.tokensPerSecond} tok/s</td>
                 </tr>
