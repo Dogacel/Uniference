@@ -81,27 +81,6 @@ def unstride_torch(shards: list[Tensor], dim: int = 0) -> Tensor:
         out[tuple(idx)] = s
     return out
 
-def debug_print(*args, **kwargs):
-    if os.environ.get("DEBUG") == "1":
-        print(*args, **kwargs)
-
-class PerfDebug:
-    def __init__(self, title: str):
-        self.title = title
-        self.start_time = 0.0
-        self.end_time = 0.0
-
-    def __enter__(self):
-        self.start_time = perf_counter()
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.end_time = perf_counter()
-        debug_print(f"{self.title}: {(self.end_time - self.start_time) * 1000:.2f} ms")
-
-def perf_debug(title: str):
-    return PerfDebug(title)
-
 def apply_scaling(freqs: torch.Tensor) -> torch.Tensor:
     # Values obtained from grid search
     scale_factor = 8
@@ -290,7 +269,7 @@ class Attention(nn.Module):
         keys = keys.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
         values = values.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
 
-        with perf_debug(f"{self.me.name} attention scores"):
+        with torch.profiler.record_function(f"attention scores"):
             scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if mask is not None:
@@ -364,7 +343,7 @@ class TransformerBlock(nn.Module):
         else:
             xp = x
 
-        with perf_debug(f"{self.me.name} attention xq"):
+        with torch.profiler.record_function(f"xq"):
             xp_norm = self.attention_norm(xp)
             freqs_cis_xq = torch.tensor_split(freqs_cis, total, dim=0)[rank]
             xq = self.attention(xp_norm, None, None, None, freqs_cis_xq, None, mode="xq")
@@ -378,10 +357,10 @@ class TransformerBlock(nn.Module):
         keys = self.attention(x_norm, None, None, None, freqs_cis, None, mode="keys")
         values = self.attention(x_norm, None, None, None, freqs_cis, None, mode="values")
 
-        with perf_debug(f"{self.me.name} xp + attention"):
+        with torch.profiler.record_function(f"xp + attention"):
             h = xp + self.attention(x_norm, xq, keys, values, freqs_cis, mask, mode="attention")
 
-        with perf_debug(f"{self.me.name} feed forward"):
+        with torch.profiler.record_function(f"ffn"):
             out = h + self.feed_forward(self.ffn_norm(h))
 
         all_gather_token = forward_chan.all_gather_async(me, out)

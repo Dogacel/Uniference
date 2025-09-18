@@ -7,3 +7,5 @@ build
 checkpoints
 event_log.jsonl
 results/
+profile_out
+out.json

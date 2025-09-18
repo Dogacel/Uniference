@@ -9,7 +9,7 @@ class WorldEventLogger:
         self.events.append(event)
 
     def dump_events(self):
-        with open("event_log.jsonl", "w") as f:
+        with open("profile_out/event_log.jsonl", "w") as f:
             for event in self.events:
                 json.dump(event, f)
                 f.write("\n")

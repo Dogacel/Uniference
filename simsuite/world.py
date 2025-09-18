@@ -37,8 +37,6 @@ class Program:
     def run(self) -> None:
         raise NotImplementedError
 
-world_profiler = TorchProfiler(out_dir="profile_out", trace_name="toynet", use_cuda=True)
-
 class World:
     devices: list[Device]
     networks: list[Network]
@@ -122,8 +120,12 @@ class World:
     def add_dependency(self, device: Device, dependency: Dependency):
         self.device_states[device].dependencies.append(dependency)
 
+
     @torch.inference_mode()
     def run(self):
+        self._run()
+
+    def _run(self):
         # The devices calling calls such as chan("foo").receive() should create dependencies on other channels.
         # Those dependencies will be modelled as graphs, each step will check if the dependencies of each request
         # is satisfied or not. This graph traversal also makes sure there are no deadlocks.
@@ -132,15 +134,19 @@ class World:
         # device1: |------------ chan.send(x)) ............ |chan.receive() ----------- end)
         # device2: .............|-------------------------- chan.send(x)) ............ |chan.receive() ---------- end)
 
+        def device_run_wrapper(device: Device):
+            device.run()
+
         for device in self.devices:
             self._runq.append(
                 (
                     device,
-                    greenlet(lambda: device.run()),
+                    greenlet(lambda: device_run_wrapper(device)),
                 )
             )
 
         deadlock_graph: list[Device] = list()
+        id = 0
 
         # Event loop
         while self._runq:
@@ -184,8 +190,15 @@ class World:
 
                 self.event_logger.log_event({"device": device.name, "action": "running", "time": state.clock})
                 state.last_run_time = perf_counter()
-                g.switch()
-                state.sync_clock()
+
+                with TorchProfiler(out_dir="profile_out", trace_name=f"{device.name}_run", id=str(id)) as P:
+                    torch.autograd._add_metadata_json("logical_clock", str(state.clock))
+                    with P.record("device_run"):
+                        g.switch()
+                        state.sync_clock()
+
+                id += 1
+
                 self.event_logger.log_event({"device": device.name, "action": "idle", "time": state.clock})
                 self.max_time = max(self.max_time, state.clock)
             else:

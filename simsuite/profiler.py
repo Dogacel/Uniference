@@ -1,9 +1,11 @@
+import os
 import time
 import functools
 import torch
 import json
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Optional
+import inspect
 
 
 class TorchProfiler:
@@ -22,8 +24,9 @@ class TorchProfiler:
         self,
         out_dir: str = "profile_out",
         trace_name: str = "run",
-        use_cuda: bool = torch.cuda.is_available(),
+        use_cuda: bool = os.environ["DEVICE"] == "cuda" if "DEVICE" in os.environ else torch.cuda.is_available(),
         include_stack: bool = False,
+        id: str = "0",
     ):
         self.out_dir = Path(out_dir)
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -33,6 +36,7 @@ class TorchProfiler:
         self.prof: Optional[torch.profiler.profile] = None
         self.t0 = 0.0
         self.wall_ms = None
+        self.id = id
 
         activities = [torch.profiler.ProfilerActivity.CPU]
         if use_cuda:
@@ -41,7 +45,7 @@ class TorchProfiler:
         self._ctx = torch.profiler.profile(
             activities=activities,
             record_shapes=True,  # <-- collects input sizes
-            profile_memory=False,
+            profile_memory=True,
             with_stack=self.include_stack,
             on_trace_ready=torch.profiler.tensorboard_trace_handler(str(self.out_dir), worker_name=self.trace_name),
         )
@@ -73,32 +77,6 @@ class TorchProfiler:
     def _export(self):
         assert self.prof is not None
 
-        # Op-level aggregated stats
-        # (Use .table() for a text view; below we build a structured JSON.)
-        rows: List[Dict[str, Any]] = []
-        for evt in self.prof.key_averages():
-            # Times are in microseconds in PyTorch profiler
-            rows.append(
-                {
-                    "name": evt.key,  # op or scope name
-                    "count": evt.count,
-                    "cpu_time_total_us": getattr(evt, "cpu_time_total", 0.0),
-                    "cuda_time_total_us": getattr(evt, "cuda_time_total", 0.0),
-                    "input_shapes": evt.input_shapes,  # list of shapes seen for this op
-                }
-            )
-
-        summary = {
-            "trace_dir": str(self.out_dir),
-            "trace_worker": self.trace_name,
-            "wall_time_ms": self.wall_ms,
-            "device": "cuda" if self.use_cuda else "cpu",
-            "ops": rows,
-        }
-
-        with open(self.out_dir / f"{self.trace_name}_summary.json", "w") as f:
-            json.dump(summary, f, indent=2)
-
         # Optional: per-event raw log (can be large). Comment out if not needed.
         raw_events = []
         for e in self.prof.events():
@@ -108,29 +86,27 @@ class TorchProfiler:
                     "cpu_time_us": getattr(e, "cpu_time", 0.0),
                     "cuda_time_us": getattr(e, "cuda_time", 0.0),
                     "input_shapes": getattr(e, "input_shapes", None),
+                    "args": getattr(e, "args", {}),  # extra info (e.g. from @profiled)
                     "is_async": getattr(e, "is_async", False),
                     "scope": getattr(e, "scope", None),
                     "fwd_thread_id": getattr(e, "fwd_thread_id", None),
                 }
             )
-        with open(self.out_dir / f"{self.trace_name}_events.json", "w") as f:
+
+        with open(self.out_dir / f"{self.trace_name}_{self.id}_events.json", "w") as f:
             json.dump(raw_events, f, indent=2)
 
-        # Bonus: write a human-readable table sorted by total CUDA/CPU time.
-        text_table = self.prof.key_averages().table(
-            sort_by="cuda_time_total" if self.use_cuda else "cpu_time_total", row_limit=200
-        )
-        with open(self.out_dir / f"{self.trace_name}_table.txt", "w") as f:
-            f.write(text_table)
 
-        # NOTE: Chrome/TensorBoard trace is emitted automatically to out_dir
-        # via tensorboard_trace_handler. Point TensorBoard at out_dir to view.
-
-def profiled(name: str | None = None, *, cuda: bool | None = None):
+def profiled(
+    name: str | None = None,
+    *,
+    cuda: bool | None = None,
+):
     """
     Decorator that records a function call inside the *current* TorchProfiler.
     If no TorchProfiler is active, it still works as a plain timer+record_function.
     """
+
     def deco(fn):
         label = name or fn.__qualname__
 
@@ -139,26 +115,31 @@ def profiled(name: str | None = None, *, cuda: bool | None = None):
             prof = TorchProfiler.GLOBAL  # current active profiler, if any
             use_cuda = torch.cuda.is_available() if cuda is None else cuda
 
-            if use_cuda: torch.cuda.synchronize()
+            # Map args/kwargs to parameter names
+            bound = inspect.signature(fn).bind(*args, **kwargs)
+            bound.apply_defaults()
+
+            if use_cuda:
+                torch.cuda.synchronize()
             t0 = time.perf_counter()
 
             # Always mark as a record_function (shows up in trace/timeline)
             with torch.profiler.record_function(label):
                 out = fn(*args, **kwargs)
 
-            if use_cuda: torch.cuda.synchronize()
+            if use_cuda:
+                torch.cuda.synchronize()
             dt_ms = (time.perf_counter() - t0) * 1000.0
 
             # Optionally log per-call timing into the profiler object
             if prof is not None:
                 if not hasattr(prof, "_decorator_logs"):
                     prof._decorator_logs = []
-                prof._decorator_logs.append(
-                    {"name": label, "wall_time_ms": dt_ms}
-                )
+                log_entry = {"name": label, "wall_time_ms": dt_ms}
+                prof._decorator_logs.append(log_entry)
 
             return out
 
         return wrapped
-    return deco
 
+    return deco
