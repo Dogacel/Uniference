@@ -84,18 +84,6 @@ class VoltageBetterProgram(Program):
 
             generated_token_count = 0
 
-            # Warmup
-            # print("Warming up...")
-            # for i in range(10):
-            #     print("Warmup pass", i + 1)
-            #     for result in model.chat_completion(
-            #         batch,
-            #         temperature=self.temperature,
-            #         top_p=self.top_p,
-            #         max_gen_len=self.max_seq_len,
-            #     ):
-            #         break
-
             for token_results in model.chat_completion(
                 batch,
                 temperature=self.temperature,

@@ -45,7 +45,8 @@ class TorchProfiler:
         self._ctx = torch.profiler.profile(
             activities=activities,
             record_shapes=True,  # <-- collects input sizes
-            profile_memory=True,
+            with_flops=True,
+            profile_memory=False,
             with_stack=self.include_stack,
             on_trace_ready=torch.profiler.tensorboard_trace_handler(str(self.out_dir), worker_name=self.trace_name),
         )

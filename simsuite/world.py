@@ -88,6 +88,9 @@ class World:
         if g is not None and not self.performance_mode:
             g.switch()
 
+    def set_runtime_params(self, params: dict[str, Any]):
+        self.runtime_params = params
+
     def chan(self, tag: str) -> "Chan":
         for chan in self.chans:
             if chan.name == tag:
@@ -120,6 +123,11 @@ class World:
     def add_dependency(self, device: Device, dependency: Dependency):
         self.device_states[device].dependencies.append(dependency)
 
+    def reset_timers(self):
+        for state in self.device_states.values():
+            state.clock = 0.0
+            state.last_run_time = perf_counter()
+        self.max_time = 0.0
 
     @torch.inference_mode()
     def run(self):
@@ -189,13 +197,18 @@ class World:
                     deadlock_graph.remove(device)
 
                 self.event_logger.log_event({"device": device.name, "action": "running", "time": state.clock})
+
                 state.last_run_time = perf_counter()
 
-                with TorchProfiler(out_dir="profile_out", trace_name=f"{device.name}_run", id=str(id)) as P:
-                    torch.autograd._add_metadata_json("logical_clock", str(state.clock))
-                    with P.record("device_run"):
-                        g.switch()
-                        state.sync_clock()
+                if not device.state.warmup:
+                    with TorchProfiler(out_dir="profile_out", trace_name=f"{device.name}_run", id=str(id)) as P:
+                        torch.autograd._add_metadata_json("logical_clock", str(state.clock))
+                        with P.record("device_run"):
+                            g.switch()
+                            state.sync_clock()
+                else:
+                    g.switch()
+                    state.sync_clock()
 
                 id += 1
 
@@ -213,3 +226,4 @@ class World:
                 device.terminated = True
 
         self.event_logger.dump_events()
+        self.event_logger.report_run(time=self.max_time, params=self.runtime_params)

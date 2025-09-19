@@ -20,6 +20,15 @@ def run(
     **kwargs,
 ):
     world = World()
+    world.set_runtime_params(
+        {
+            "device_count": device_count,
+            "prompt_length": len(prompt),
+            "program": program,
+            "max_seq_len": kwargs.get("max_seq_len", None),
+            "max_tokens": kwargs.get("max_tokens", None),
+        }
+    )
 
     device_spec = DeviceSpec(flops=24 * TFLOPs, mem=8 * GB, max_bandwidth=5 * Gbps, inherent_latency=10 * ms)
 

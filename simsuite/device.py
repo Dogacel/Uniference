@@ -43,6 +43,11 @@ class DeviceState:
     """
     last_run_time: float = 0.0
 
+    """
+    Whether the device is in warmup mode. In warmup mode, the profiler is not used.
+    """
+    warmup: bool = False
+
     def sync_clock(self) -> float:
         now = perf_counter()
         self.clock += (now - self.last_run_time)
