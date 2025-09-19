@@ -265,8 +265,8 @@ class Attention(nn.Module):
 
         bsz_xq, seqlen_xq, _, _ = xq.shape
 
-        xq = xq.transpose(1, 2)  # (bs, n_local_heads, seqlen_p, head_dim)
-        keys = keys.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
+        xq = xq.transpose(1, 2).type_as(values)  # (bs, n_local_heads, seqlen_p, head_dim)
+        keys = keys.transpose(1, 2).type_as(values)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
         values = values.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
 
         with torch.profiler.record_function(f"attention scores"):
