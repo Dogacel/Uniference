@@ -16,7 +16,7 @@ def run(
     prompt: str,
     **kwargs,
 ):
-    world = World(kwargs=kwargs)
+    world = World(**kwargs)
     world.set_runtime_params(
         {
             "device_count": device_count,

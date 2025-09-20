@@ -10,6 +10,16 @@ PROMPT_5000 := $(shell cat ./checkpoints/prompt_5000.txt)
 
 RUN_ID=$(shell date +%s)
 
+pdebug: clear_prof
+	DEVICE=mps DEBUG=1 ./run.sh scenarios.concurrent_scenario \
+		--device_count=2 \
+		--prompt="Hello!" \
+		--max_seq_len=512 \
+		--max_tokens=10 \
+		--performance_mode
+
+	uv run simsuite/trace_merger.py results/${RUN_ID}_concurrent.json profile_out --normalize-logical-clock
+
 debug: clear_prof
     # Warmup 
 	DEVICE=mps DEBUG=1 ./run.sh scenarios.voltage_scenario \

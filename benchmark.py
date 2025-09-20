@@ -29,6 +29,7 @@ def run_once(
     prompt: str,
     seq_len: int,
     max_tokens: int,
+    output_file: str,
 ) -> int:
     args: List[str] = [
         "./run.sh",
@@ -37,6 +38,7 @@ def run_once(
         f"--prompt={prompt}",
         f"--max_seq_len={seq_len}",
         f"--max_tokens={max_tokens}",
+        f"--output_file={output_file}",
     ]
 
     if device_count == 0:
@@ -67,10 +69,13 @@ def parse_int_list(s: str) -> List[int]:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    device_counts = [0, 1, 2, 4, 8, 16, 32]
+    device_counts = [0, 1, 2, 4, 8] #, 16, 32]
     prompt = load_prompt("checkpoints/prompt_5000.txt")
     prompts = [get_prompt_sequence_first_n(prompt, n) for n in [10, 200, 1_000]]
     repeats = 100
+
+    args = argv[1:] if argv else sys.argv[1:]
+    output_file = "results/" + args[0] if args and len(args) > 0 else "results/run_report.json"
 
     try:
         # Warmup
@@ -81,6 +86,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 prompt=prompts[0],
                 seq_len=256,
                 max_tokens=5,
+                output_file="/tmp/warmup.json",
             )
 
         for device_count in device_counts:
@@ -93,6 +99,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         prompt=prompt,
                         seq_len=seq_len,
                         max_tokens=seq_len // 10,
+                        output_file=output_file,
                     )
 
                     if rc != 0:

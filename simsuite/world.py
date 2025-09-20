@@ -5,7 +5,6 @@ import torch
 from time import perf_counter
 from typing import Optional, Callable, Any
 from greenlet import greenlet
-from typing_extensions import Literal
 
 from simsuite.chan import Chan
 from simsuite.dependency import Dependency
@@ -50,6 +49,7 @@ class World:
     _runq = []  # round-robin queue of runnable greenlets
     performance_mode: bool
     debug_run: bool
+    output_file: str
 
     def __init__(self, **kwargs) -> None:
         self.devices = []
@@ -61,6 +61,7 @@ class World:
         self.max_time = 0.0
         self.performance_mode = kwargs.get("performance_mode", False)
         self.debug_run = kwargs.get("debug_run", False)
+        self.output_file = kwargs.get("output_file", "results/run_report.json")
 
     def device(self, deviceArgs: DeviceArgs, program: Program):
         device = Device(deviceArgs, program, self)
@@ -236,4 +237,8 @@ class World:
         if self.debug_run:
             self.event_logger.dump_events()
 
-        self.event_logger.report_run(time=self.max_time, params=self.runtime_params)
+        self.event_logger.report_run(
+            time=self.max_time,
+            output_file=self.output_file,
+            params=self.runtime_params,
+        )
