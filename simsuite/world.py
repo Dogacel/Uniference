@@ -37,6 +37,7 @@ class Program:
     def run(self) -> None:
         raise NotImplementedError
 
+
 class World:
     devices: list[Device]
     networks: list[Network]
@@ -48,8 +49,9 @@ class World:
     max_time: float
     _runq = []  # round-robin queue of runnable greenlets
     performance_mode: bool
+    debug_run: bool
 
-    def __init__(self) -> None:
+    def __init__(self, **kwargs) -> None:
         self.devices = []
         self.networks = []
         self.chans = []
@@ -57,7 +59,8 @@ class World:
         self.events = []
         self.device_states = {}
         self.max_time = 0.0
-        self.performance_mode = False
+        self.performance_mode = kwargs.get("performance_mode", False)
+        self.debug_run = kwargs.get("debug_run", False)
 
     def device(self, deviceArgs: DeviceArgs, program: Program):
         device = Device(deviceArgs, program, self)
@@ -201,7 +204,12 @@ class World:
                 state.last_run_time = perf_counter()
 
                 if not device.state.warmup:
-                    with TorchProfiler(out_dir="profile_out", trace_name=f"{device.name}_run", id=str(id)) as P:
+                    with TorchProfiler(
+                        out_dir="profile_out",
+                        trace_name=f"{device.name}_run",
+                        id=str(id),
+                        report=self.debug_run,
+                    ) as P:
                         torch.autograd._add_metadata_json("logical_clock", str(state.clock))
                         with P.record("device_run"):
                             g.switch()
@@ -225,5 +233,7 @@ class World:
                 self.event_logger.log_event({"device": device.name, "action": "finished", "time": state.clock})
                 device.terminated = True
 
-        self.event_logger.dump_events()
+        if self.debug_run:
+            self.event_logger.dump_events()
+
         self.event_logger.report_run(time=self.max_time, params=self.runtime_params)

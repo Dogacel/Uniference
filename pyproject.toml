@@ -52,6 +52,12 @@ torch = [
     "blobfile",
     "fbgemm-gpu-genai==1.1.2; sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
+analysis = [
+    "jupyter",
+    "pandas",
+    "matplotlib",
+    "scipy",
+]
 
 [tool.setuptools]
 package-dir = {"llama_models" = "llama_models"}

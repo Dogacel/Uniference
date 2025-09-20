@@ -27,6 +27,7 @@ class TorchProfiler:
         use_cuda: bool = os.environ["DEVICE"] == "cuda" if "DEVICE" in os.environ else torch.cuda.is_available(),
         include_stack: bool = False,
         id: str = "0",
+        report: bool = True,
     ):
         self.out_dir = Path(out_dir)
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -37,6 +38,7 @@ class TorchProfiler:
         self.t0 = 0.0
         self.wall_ms = None
         self.id = id
+        self.report = report
 
         activities = [torch.profiler.ProfilerActivity.CPU]
         if use_cuda:
@@ -48,7 +50,9 @@ class TorchProfiler:
             with_flops=True,
             profile_memory=False,
             with_stack=self.include_stack,
-            on_trace_ready=torch.profiler.tensorboard_trace_handler(str(self.out_dir), worker_name=self.trace_name),
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(str(self.out_dir), worker_name=self.trace_name)
+            if self.report
+            else None,
         )
 
     def __enter__(self):
@@ -68,7 +72,9 @@ class TorchProfiler:
         self._ctx.__exit__(exc_type, exc, tb)
 
         # Save summaries
-        self._export()
+        if self.report:
+            self._export()
+
         TorchProfiler.GLOBAL = None
 
     def record(self, name: str):

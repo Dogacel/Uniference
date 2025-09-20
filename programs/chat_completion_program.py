@@ -34,6 +34,7 @@ class TextGenerationHAProgram(Program):
         self.world_size: Optional[int]
         self.quantization_mode: Optional[str]
         self.disable_kv_cache: bool
+        self.max_tokens: int
 
     def initialize(self, me: Device) -> None:
         def __initialize_model(
@@ -45,6 +46,7 @@ class TextGenerationHAProgram(Program):
             world_size: Optional[int] = None,
             quantization_mode: Optional[str] = None,
             disable_kv_cache: bool = False,
+            max_tokens = 256,
             **kwargs,
         ) -> None:
             self.ckpt_dir = ckpt_dir
@@ -55,6 +57,7 @@ class TextGenerationHAProgram(Program):
             self.world_size = world_size
             self.quantization_mode = quantization_mode
             self.disable_kv_cache = disable_kv_cache
+            self.max_tokens = max_tokens
 
         fire.Fire(__initialize_model)
 
@@ -103,8 +106,6 @@ class TextGenerationHAProgram(Program):
                 result = token_results[0]
                 generated_token_count += 1
 
-                if result.finished:
-                    break
 
                 world.event_logger.log_event(
                     {
@@ -115,6 +116,8 @@ class TextGenerationHAProgram(Program):
                     }
                 )
                 cprint(result.text, color="yellow", end="", flush=True)
+                if result.finished or generated_token_count >= self.max_tokens:
+                    break
             print("\n")
 
         if input is not None:
