@@ -1,7 +1,14 @@
+import io
+import shutil
+import tempfile
+import matplotlib.pyplot as plt
+import numpy as np
 import os
 import signal
 import subprocess
 import sys
+from imgcat import imgcat
+from scipy.stats import qmc
 from typing import List, Optional, Sequence
 
 
@@ -29,6 +36,7 @@ def run_once(
     prompt: str,
     seq_len: int,
     max_tokens: int,
+    yield_probability: float,
     output_file: str,
 ) -> int:
     args: List[str] = [
@@ -39,6 +47,7 @@ def run_once(
         f"--max_seq_len={seq_len}",
         f"--max_tokens={max_tokens}",
         f"--output_file={output_file}",
+        f"--yield_probability={yield_probability}",
     ]
 
     if device_count == 0:
@@ -67,47 +76,78 @@ def run_once(
 def parse_int_list(s: str) -> List[int]:
     return [int(x.strip()) for x in s.split(",") if x.strip()]
 
-
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    device_counts = [0, 1] #, 2, 4, 8, 16, 32]
+    device_counts = [0, 1, 2, 4]  # , 8, 16, 32]
+
+    # 2D Latin hypercube sampling
+    bounds_2d = np.array(
+        [
+            [0.0, 2000.0],  # Sequence length
+            [0.0, 1.0],  # Yield probability
+        ]
+    )
+    d = bounds_2d.shape[0]
+    sample_count = 3
+
+    sampler2d = qmc.LatinHypercube(d)
+    x_2d = sampler2d.random(sample_count)
+    x_2d = qmc.scale(x_2d, bounds_2d[:, 0], bounds_2d[:, 1])
+
+    # Convert the first dimension to integers by flooring them for X_2d
+    x_2d[:, 0] = np.floor(x_2d[:, 0])
+
+    # Visualize the 2D samples
+    plt.figure(figsize=(7, 5))
+    plt.scatter(x_2d[:, 0], x_2d[:, 1], c=x_2d[:, 1], cmap="viridis", s=18, alpha=0.8, edgecolor="white", linewidth=0.3)
+    plt.xlabel("Sequence length")
+    plt.ylabel("Probability of yielding on layer")
+    plt.title("Latin hypercube samples in 2D parameter space")
+    plt.colorbar(label="Yield Ratio")
+
+
     prompt = load_prompt("checkpoints/prompt_5000.txt")
-    prompts = [get_prompt_sequence_first_n(prompt, n) for n in [10, 200, 1_000]]
-    repeats = 1
 
     args = argv[1:] if argv else sys.argv[1:]
     output_file = "results/" + args[0] if args and len(args) > 0 else "results/run_report.json"
+
+    plt.savefig(output_file.replace(".json", "_lhs.png"), format="png", dpi=200, bbox_inches="tight")
 
     try:
         # Warmup
         for _ in range(3):
             rc = run_once(
-                scenario="scenarios.concurrent_scenario",
+                scenario="scenarios.yield_perf_scenario",
                 device_count=1,
-                prompt=prompts[0],
+                prompt="Hello, world!",
                 seq_len=256,
                 max_tokens=5,
+                yield_probability=0.5,
                 output_file="/tmp/warmup.json",
             )
 
         for device_count in device_counts:
-            for _ in range(repeats):
-                for prompt in prompts:
-                    seq_len = len(prompt)
-                    rc = run_once(
-                        scenario="scenarios.concurrent_scenario",
-                        device_count=device_count,
-                        prompt=prompt,
-                        seq_len=seq_len,
-                        max_tokens=seq_len // 10,
-                        output_file=output_file,
-                    )
+            for x in x_2d:
+                prompt_length = int(x[0])
+                yield_probability = float(x[1])
 
-                    if rc != 0:
-                        print(
-                            f"Command failed with exit code {rc}",
-                            file=sys.stderr,
-                        )
-                        return rc
+                prompt = get_prompt_sequence_first_n(prompt, prompt_length)
+                seq_len = len(prompt)
+                rc = run_once(
+                    scenario="scenarios.yield_perf_scenario",
+                    device_count=device_count,
+                    prompt=prompt,
+                    seq_len=seq_len,
+                    max_tokens=seq_len // 10,
+                    yield_probability=yield_probability,
+                    output_file=output_file,
+                )
+
+                if rc != 0:
+                    print(
+                        f"Command failed with exit code {rc}",
+                        file=sys.stderr,
+                    )
+                    return rc
         return 0
     except KeyboardInterrupt:
         print("Aborted.", file=sys.stderr)

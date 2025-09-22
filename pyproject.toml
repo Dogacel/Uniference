@@ -57,6 +57,8 @@ analysis = [
     "pandas",
     "matplotlib",
     "scipy",
+    "scikit-learn",
+    "imgcat",
 ]
 
 [tool.setuptools]

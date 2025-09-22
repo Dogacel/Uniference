@@ -85,7 +85,7 @@ class Chan:
                 "id": item.id,
             }
         )
-        self.world.xyield(f"chan {self.name} synchronize()")
+        self.world.xyield(me, f"chan {self.name} synchronize()")
         self.world.event_logger.log_event(
             {
                 "chan": self.name,
@@ -161,7 +161,7 @@ class Chan:
             ),
         )
 
-        self.world.xyield(f"chan {self.name} all_gather_async_await()")
+        self.world.xyield(me, f"chan {self.name} all_gather_async_await()")
 
         # Round completed, reset checkpoints
         if len(self._all_gathers[next_round]) == len(self.subscribers):
@@ -188,7 +188,7 @@ class Chan:
                 time=lambda: self.queue[0].time if self.queue else None,
             ),
         )
-        self.world.xyield(f"chan {self.name} receive()")
+        self.world.xyield(me, f"chan {self.name} receive()")
         self.world.event_logger.log_event(
             {
                 "chan": self.name,
@@ -239,7 +239,7 @@ class Chan:
                 )
                 self.total_transferred_count += 1
 
-        self.world.xyield(f"chan {self.name} send()")
+        self.world.xyield(me, f"chan {self.name} send()")
 
         # TODO: evaluating listeners here might cause time skew
         for listener in self.listeners:

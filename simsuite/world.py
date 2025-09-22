@@ -87,7 +87,7 @@ class World:
             )
         raise ValueError("No network connection found")
 
-    def xyield(self, event_type: str, data: Optional[Any] = None):
+    def xyield(self, device: Optional[Device], event_type: str, data: Optional[Any] = None):
         g = greenlet.getcurrent().parent
         if g is not None and not self.performance_mode:
             g.switch()
@@ -159,6 +159,7 @@ class World:
 
         deadlock_graph: list[Device] = list()
         id = 0
+        yield_count = 0
 
         # Event loop
         while self._runq:
@@ -215,6 +216,7 @@ class World:
                         with P.record("device_run"):
                             g.switch()
                             state.sync_clock()
+                            yield_count += 1
                 else:
                     g.switch()
                     state.sync_clock()
@@ -237,8 +239,11 @@ class World:
         if self.debug_run:
             self.event_logger.dump_events()
 
+
         self.event_logger.report_run(
             time=self.max_time,
             output_file=self.output_file,
-            params=self.runtime_params,
+            params=self.runtime_params | {
+                "yield_count": yield_count
+            },
         )
