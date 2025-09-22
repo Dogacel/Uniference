@@ -146,17 +146,6 @@ class Llama3:
         self.formatter = ChatFormat(tokenizer)
         self.gen_cache = []
 
-    def sync_kv_cache(self, msg: SyncKVCache):
-        self.model.sync_kv_cache(layer_id=msg.layer_id, start_pos=msg.start_pos, xk=msg.xk, xv=msg.xv)
-
-    def sync_gen_cache(self, msg: SyncGen):
-        self.gen_cache.append(msg)
-
-    def send_sync_gen(self, pos: int, next_token: torch.Tensor):
-        if self.args.enable_sync:
-            msg = SyncGen(pos=pos, next_token=next_token)
-            self.args.me.send("gen", msg)
-
     def clean_cache(self):
         if isinstance(self.model, Transformer):
             self.model.clean_cache()
@@ -255,7 +244,6 @@ class Llama3:
             # only replace token if prompt has already been generated
             next_token = torch.where(input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token)
             tokens[:, cur_pos] = next_token
-            self.send_sync_gen(cur_pos, next_token)
 
             target = tokens[:, prev_pos + 1 : cur_pos + 1]
 

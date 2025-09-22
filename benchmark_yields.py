@@ -45,6 +45,8 @@ def run_once(
         "--debug_run=False",
         f"--prompt={prompt}",
         f"--max_seq_len={seq_len}",
+        "--temperature=1.0",
+        "--top_p=1.0",
         f"--max_tokens={max_tokens}",
         f"--output_file={output_file}",
         f"--yield_probability={yield_probability}",
@@ -87,7 +89,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ]
     )
     d = bounds_2d.shape[0]
-    sample_count = 3
+    sample_count = 250
 
     sampler2d = qmc.LatinHypercube(d)
     x_2d = sampler2d.random(sample_count)
@@ -129,15 +131,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             for x in x_2d:
                 prompt_length = int(x[0])
                 yield_probability = float(x[1])
+                print(f"Sequence length: {prompt_length}, Yield probability: {yield_probability}")
 
-                prompt = get_prompt_sequence_first_n(prompt, prompt_length)
-                seq_len = len(prompt)
+                sub_prompt = get_prompt_sequence_first_n(prompt, prompt_length)
+                seq_len = len(sub_prompt)
                 rc = run_once(
                     scenario="scenarios.yield_perf_scenario",
                     device_count=device_count,
-                    prompt=prompt,
+                    prompt=sub_prompt,
                     seq_len=seq_len,
-                    max_tokens=seq_len // 10,
+                    max_tokens=10,
                     yield_probability=yield_probability,
                     output_file=output_file,
                 )

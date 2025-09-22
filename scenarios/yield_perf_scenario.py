@@ -1,6 +1,6 @@
 import fire
+from programs.yield_perf_program import YieldPerfProgram
 from simsuite.device import DeviceArgs
-from programs.chat_completion_program import TextGenerationHAProgram
 from models.datatypes import RawMessage
 from simsuite.network import NetworkArgs
 from simsuite.units import TFLOPs
@@ -34,7 +34,7 @@ def run(
     for i in range(device_count):
         device = world.device(
             deviceArgs=DeviceArgs(spec=device_spec, client=True, name=f"phone_{i + 1}"),
-            program=TextGenerationHAProgram(),
+            program=YieldPerfProgram(),
         )
         device.send("input", [RawMessage(role="user", content=prompt)])
         devices.append(device)
