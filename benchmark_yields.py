@@ -45,7 +45,7 @@ def run_once(
         "--debug_run=False",
         f"--prompt={prompt}",
         f"--max_seq_len={seq_len}",
-        "--temperature=1.0",
+        "--temperature=0.0",
         "--top_p=1.0",
         f"--max_tokens={max_tokens}",
         f"--output_file={output_file}",
@@ -79,7 +79,7 @@ def parse_int_list(s: str) -> List[int]:
     return [int(x.strip()) for x in s.split(",") if x.strip()]
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    device_counts = [0, 1, 2, 4]  # , 8, 16, 32]
+    device_counts = [1, 2, 4]  # , 8, 16, 32]
 
     # 2D Latin hypercube sampling
     bounds_2d = np.array(
@@ -140,7 +140,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     device_count=device_count,
                     prompt=sub_prompt,
                     seq_len=seq_len,
-                    max_tokens=10,
+                    max_tokens=min(prompt_length, 25),
                     yield_probability=yield_probability,
                     output_file=output_file,
                 )

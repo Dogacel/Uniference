@@ -4,6 +4,10 @@ export RANK=0
 export WORLD_SIZE=1
 export MASTER_ADDR=localhost
 
+if [ -z "$MASTER_PORT" ]; then
+  export MASTER_PORT=$((RANDOM + 10000))
+fi
+
 TARGET_SCENARIO="$1"
 shift
 EXTRA_ARGS=("$@")

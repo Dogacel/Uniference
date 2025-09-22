@@ -35,6 +35,7 @@ class YieldPerfProgram(Program):
         self.quantization_mode: Optional[str]
         self.disable_kv_cache: bool
         self.max_tokens: int
+        self.yield_probability: float
 
     def initialize(self, me: Device) -> None:
         def __initialize_model(
@@ -47,6 +48,7 @@ class YieldPerfProgram(Program):
             quantization_mode: Optional[str] = None,
             disable_kv_cache: bool = False,
             max_tokens=256,
+            yield_probability: float = 1.0,
             **kwargs,
         ) -> None:
             self.ckpt_dir = ckpt_dir
@@ -58,6 +60,7 @@ class YieldPerfProgram(Program):
             self.quantization_mode = quantization_mode
             self.disable_kv_cache = disable_kv_cache
             self.max_tokens = max_tokens
+            self.yield_probability = yield_probability
 
         fire.Fire(__initialize_model)
 
@@ -70,6 +73,7 @@ class YieldPerfProgram(Program):
             quantization_mode=self.quantization_mode,
             device=get_device(),
             me=me,
+            yield_probability=self.yield_probability,
         )
 
     def run(self) -> None:

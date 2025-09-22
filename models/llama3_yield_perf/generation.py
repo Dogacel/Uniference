@@ -52,6 +52,7 @@ class Llama3:
         device: str | TorchDevice = "cuda",
         use_kv_cache: bool = True,
         enable_sync: bool = False,
+        yield_probability: float = 1.0,
     ):
         if device is not Device:
             device = torch.device(device)
@@ -102,6 +103,7 @@ class Llama3:
             max_batch_size=max_batch_size,
             use_kv_cache=use_kv_cache,
             enable_sync=enable_sync,
+            yield_probability=yield_probability,
             **params,
         )
         tokenizer = Tokenizer.get_instance()
