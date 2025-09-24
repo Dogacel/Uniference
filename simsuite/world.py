@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 
 import torch
 
@@ -36,6 +37,14 @@ class Program:
     def run(self) -> None:
         raise NotImplementedError
 
+def get_device():
+    if "DEVICE" in os.environ:
+        return os.environ["DEVICE"]
+    if torch.cuda.is_available():
+        return "cuda"
+    elif torch.xpu.is_available():
+        return "xpu"
+    return "cpu"
 
 class World:
     devices: list[Device]
@@ -62,6 +71,7 @@ class World:
         self.performance_mode = kwargs.get("performance_mode", False)
         self.debug_run = kwargs.get("debug_run", False)
         self.output_file = kwargs.get("output_file", "results/run_report.json")
+        self.device_type = get_device()
 
     def device(self, deviceArgs: DeviceArgs, program: Program):
         device = Device(deviceArgs, program, self)
@@ -90,6 +100,8 @@ class World:
     def xyield(self, device: Optional[Device], event_type: str, data: Optional[Any] = None):
         g = greenlet.getcurrent().parent
         if g is not None and not self.performance_mode:
+            if self.device_type == "cuda":
+                torch.cuda.synchronize()
             g.switch()
 
     def set_runtime_params(self, params: dict[str, Any]):
