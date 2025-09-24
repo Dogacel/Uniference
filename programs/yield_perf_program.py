@@ -113,6 +113,7 @@ class YieldPerfProgram(Program):
                 cprint(result.text, color="yellow", end="", flush=True)
 
                 if result.finished or generated_token_count >= self.max_tokens:
+                    world.runtime_params["total_generated_tokens"] = generated_token_count
                     break
             print("\n")
 

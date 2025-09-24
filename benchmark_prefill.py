@@ -89,7 +89,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         ]
     )
     d = bounds_2d.shape[0]
-    sample_count = 250
+    sample_count = 1000
 
     sampler2d = qmc.LatinHypercube(d)
     x_2d = sampler2d.random(sample_count)
@@ -129,18 +129,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
         for device_count in device_counts:
             for x in x_2d:
-                prompt_length = int(x[0])
+                sequence_length = int(x[0])
                 yield_probability = float(x[1])
-                print(f"Sequence length: {prompt_length}, Yield probability: {yield_probability}")
+                print(f"Sequence length: {sequence_length}, Yield probability: {yield_probability}")
 
-                sub_prompt = get_prompt_sequence_first_n(prompt, prompt_length)
+                sub_prompt = get_prompt_sequence_first_n(prompt, sequence_length)
                 seq_len = len(sub_prompt)
                 rc = run_once(
                     scenario="scenarios.yield_perf_scenario",
                     device_count=device_count,
                     prompt=sub_prompt,
-                    seq_len=seq_len,
-                    max_tokens=min(prompt_length, 25),
+                    seq_len=8192,
+                    max_tokens=1,
                     yield_probability=yield_probability,
                     output_file=output_file,
                 )

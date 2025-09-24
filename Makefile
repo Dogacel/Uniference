@@ -2,23 +2,25 @@
 export DEVICE=mps
 export DEBUG=0
 
-PROMPT_100 := $(shell cat ./checkpoints/prompt_1000.txt | head -n 100 | head -c 105)
-PROMPT_200 := $(shell cat ./checkpoints/prompt_1000.txt | head -n 200 | head -c 105)
-PROMPT_500 := $(shell cat ./checkpoints/prompt_1000.txt | head -n 500 | head -c 105)
+PROMPT_100 := $(shell cat ./checkpoints/prompt_1000.txt | head -c 100)
+PROMPT_200 := $(shell cat ./checkpoints/prompt_1000.txt | head -c 200)
+PROMPT_500 := $(shell cat ./checkpoints/prompt_1000.txt | head -c 500)
 PROMPT_1000 := $(shell cat ./checkpoints/prompt_1000.txt)
 PROMPT_5000 := $(shell cat ./checkpoints/prompt_5000.txt)
 
 RUN_ID=$(shell date +%s)
 
 pdebug: clear_prof
-	DEVICE=mps DEBUG=1 ./run.sh scenarios.concurrent_scenario \
-		--device_count=2 \
-		--prompt="Hello!" \
-		--max_seq_len=512 \
-		--max_tokens=10 \
-		--performance_mode
+	DEVICE=mps DEBUG=1 ./run.sh scenarios.yield_perf_scenario \
+		--device_count=1 \
+		--prompt="${PROMPT_1000}" \
+		--max_seq_len=4096 \
+		--max_tokens=25 \
+		--yield_probability=1.0 \
+# 		--performance_mode \
+# 		--debug_run \
 
-	uv run simsuite/trace_merger.py results/${RUN_ID}_concurrent.json profile_out --normalize-logical-clock
+	uv run simsuite/trace_merger.py results/${RUN_ID}_yield_perf.json profile_out --normalize-logical-clock
 
 debug: clear_prof
     # Warmup 

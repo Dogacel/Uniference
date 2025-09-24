@@ -59,6 +59,7 @@ analysis = [
     "scipy",
     "scikit-learn",
     "imgcat",
+    "seaborn",
 ]
 
 [tool.setuptools]
