@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import os
 import signal
 import subprocess
@@ -29,6 +30,7 @@ def run_once(
     prompt: str,
     seq_len: int,
     max_tokens: int,
+    yield_probability: float,
     output_file: str,
 ) -> int:
     args: List[str] = [
@@ -37,8 +39,11 @@ def run_once(
         "--debug_run=False",
         f"--prompt={prompt}",
         f"--max_seq_len={seq_len}",
+        "--temperature=0.0",
+        "--top_p=1.0",
         f"--max_tokens={max_tokens}",
         f"--output_file={output_file}",
+        f"--yield_probability={yield_probability}",
     ]
 
     if device_count == 0:
@@ -69,45 +74,55 @@ def parse_int_list(s: str) -> List[int]:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    device_counts = [0, 1] #, 2, 4, 8, 16, 32]
+    device_counts = [1, 2, 4]  # , 8, 16, 32]
+    yield_probs = [0.0, 1.0]
+    text_lengths = [4, 64, 256, 2048]
+    repeats = 10
+
     prompt = load_prompt("checkpoints/prompt_5000.txt")
-    prompts = [get_prompt_sequence_first_n(prompt, n) for n in [10, 200, 1_000]]
-    repeats = 1
 
     args = argv[1:] if argv else sys.argv[1:]
     output_file = "results/" + args[0] if args and len(args) > 0 else "results/run_report.json"
+
+    plt.savefig(output_file.replace(".json", "_lhs.png"), format="png", dpi=200, bbox_inches="tight")
 
     try:
         # Warmup
         for _ in range(3):
             rc = run_once(
-                scenario="scenarios.concurrent_scenario",
+                scenario="scenarios.yield_perf_scenario",
                 device_count=1,
-                prompt=prompts[0],
+                prompt="Hello, world!",
                 seq_len=256,
                 max_tokens=5,
+                yield_probability=0.5,
                 output_file="/tmp/warmup.json",
             )
 
         for device_count in device_counts:
-            for _ in range(repeats):
-                for prompt in prompts:
-                    seq_len = len(prompt)
-                    rc = run_once(
-                        scenario="scenarios.concurrent_scenario",
-                        device_count=device_count,
-                        prompt=prompt,
-                        seq_len=seq_len,
-                        max_tokens=seq_len // 10,
-                        output_file=output_file,
-                    )
+            for r in range(repeats):
+                for text_length in text_lengths:
+                    for yield_probability in yield_probs:
+                        sequence_length = text_length
+                        print(f"Sequence length: {sequence_length}, Yield probability: {yield_probability}")
 
-                    if rc != 0:
-                        print(
-                            f"Command failed with exit code {rc}",
-                            file=sys.stderr,
+                        sub_prompt = get_prompt_sequence_first_n(prompt, sequence_length)
+                        rc = run_once(
+                            scenario="scenarios.yield_perf_scenario",
+                            device_count=device_count,
+                            prompt=sub_prompt,
+                            seq_len=8192,
+                            max_tokens=1,
+                            yield_probability=yield_probability,
+                            output_file=output_file,
                         )
-                        return rc
+
+                        if rc != 0:
+                            print(
+                                f"Command failed with exit code {rc}",
+                                file=sys.stderr,
+                            )
+                            return rc
         return 0
     except KeyboardInterrupt:
         print("Aborted.", file=sys.stderr)

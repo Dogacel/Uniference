@@ -37,6 +37,7 @@ class Program:
     def run(self) -> None:
         raise NotImplementedError
 
+
 def get_device():
     if "DEVICE" in os.environ:
         return os.environ["DEVICE"]
@@ -45,6 +46,7 @@ def get_device():
     elif torch.xpu.is_available():
         return "xpu"
     return "cpu"
+
 
 class World:
     devices: list[Device]
@@ -102,7 +104,14 @@ class World:
         if g is not None and not self.performance_mode:
             if self.device_type == "cuda":
                 torch.cuda.synchronize()
+
+            if device is not None:
+                device.state.sync_clock()
+
             g.switch()
+
+            if device is not None:
+                device.state.last_run_time = perf_counter()
 
     def set_runtime_params(self, params: dict[str, Any]):
         self.runtime_params = params
@@ -159,7 +168,9 @@ class World:
         # device2: .............|-------------------------- chan.send(x)) ............ |chan.receive() ---------- end)
 
         def device_run_wrapper(device: Device):
+            device.state.last_run_time = perf_counter()
             device.run()
+            device.state.sync_clock()
 
         for device in self.devices:
             self._runq.append(
@@ -172,6 +183,24 @@ class World:
         deadlock_graph: list[Device] = list()
         id = 0
         yield_count = 0
+
+        # Calculate yield normalization factor
+        start_time = perf_counter()
+        end_time = perf_counter()
+
+        def gr_perf():
+            nonlocal start_time, end_time
+            end_time = perf_counter()
+            g = greenlet.getcurrent().parent
+            g.switch()
+            start_time = perf_counter()
+
+        gr = greenlet(gr_perf)
+        gr.switch()
+        gr.switch()
+
+        print(f"Yield overhead: {(end_time - start_time) * 1_000_000:.2f} us")
+
 
         # Event loop
         while self._runq:
@@ -227,11 +256,11 @@ class World:
                         torch.autograd._add_metadata_json("logical_clock", str(state.clock))
                         with P.record("device_run"):
                             g.switch()
-                            state.sync_clock()
+                            # state.sync_clock()
                             yield_count += 1
                 else:
                     g.switch()
-                    state.sync_clock()
+                    # state.sync_clock()
 
                 id += 1
 
@@ -251,11 +280,8 @@ class World:
         if self.debug_run:
             self.event_logger.dump_events()
 
-
         self.event_logger.report_run(
             time=self.max_time,
             output_file=self.output_file,
-            params=self.runtime_params | {
-                "yield_count": yield_count
-            },
+            params=self.runtime_params | {"yield_count": yield_count},
         )
