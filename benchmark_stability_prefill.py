@@ -77,7 +77,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     device_counts = [1, 2, 4]  # , 8, 16, 32]
     yield_probs = [0.0, 1.0]
     text_lengths = [4, 64, 256, 2048]
-    repeats = 10
+    repeats = 100
 
     prompt = load_prompt("checkpoints/prompt_5000.txt")
 

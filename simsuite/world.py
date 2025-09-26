@@ -201,7 +201,6 @@ class World:
 
         print(f"Yield overhead: {(end_time - start_time) * 1_000_000:.2f} us")
 
-
         # Event loop
         while self._runq:
             for event in self.events:

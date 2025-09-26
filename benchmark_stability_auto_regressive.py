@@ -75,9 +75,9 @@ def parse_int_list(s: str) -> List[int]:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     device_counts = [1, 2, 4]  # , 8, 16, 32]
-    yield_probs = [0.0, 1.0]
-    text_lengths = [4, 16, 64, 256]
-    repeats = 10
+    yield_probs = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    text_lengths = [16, 64, 256]
+    repeats = 25
 
     prompt = load_prompt("checkpoints/prompt_5000.txt")
 
