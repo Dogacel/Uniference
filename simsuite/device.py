@@ -65,6 +65,8 @@ class Device:
         self.terminated = False
         self.state: "DeviceState"
 
+
+
     def initialize(self):
         print(f"Initializing device {self.name}")
         self.program.initialize(self)

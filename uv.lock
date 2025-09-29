@@ -769,6 +769,18 @@ wheels = [
 ]
 
 [[package]]
+name = "ftfy"
+version = "6.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "wcwidth" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a5/d3/8650919bc3c7c6e90ee3fa7fd618bf373cbbe55dff043bd67353dbb20cd8/ftfy-6.3.1.tar.gz", hash = "sha256:9b3c3d90f84fb267fe64d375a07b7f8912d817cf86009ae134aa03e1819506ec", size = 308927, upload-time = "2024-10-26T00:50:35.149Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/6e/81d47999aebc1b155f81eca4477a616a70f238a2549848c38983f3c22a82/ftfy-6.3.1-py3-none-any.whl", hash = "sha256:7c70eb532015cd2f9adb53f101fb6c7945988d023a085d127d1573dc49dd0083", size = 44821, upload-time = "2024-10-26T00:50:33.425Z" },
+]
+
+[[package]]
 name = "greenlet"
 version = "3.2.4"
 source = { registry = "https://pypi.org/simple" }
@@ -1423,8 +1435,10 @@ version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "fire" },
+    { name = "ftfy" },
     { name = "greenlet" },
     { name = "jinja2" },
+    { name = "ns-py" },
     { name = "packaging" },
     { name = "pillow" },
     { name = "pydantic" },
@@ -1432,6 +1446,7 @@ dependencies = [
     { name = "rich" },
     { name = "tiktoken" },
     { name = "torch" },
+    { name = "tqdm" },
 ]
 
 [package.optional-dependencies]
@@ -1471,6 +1486,7 @@ requires-dist = [
     { name = "fbgemm-gpu-genai", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'torch'", specifier = "==1.1.2" },
     { name = "fire", specifier = ">=0.7.0" },
     { name = "fire", marker = "extra == 'torch'" },
+    { name = "ftfy" },
     { name = "greenlet", specifier = ">=3.2.4" },
     { name = "imgcat", marker = "extra == 'analysis'" },
     { name = "isort", marker = "extra == 'dev'" },
@@ -1478,6 +1494,7 @@ requires-dist = [
     { name = "jupyter", marker = "extra == 'analysis'" },
     { name = "matplotlib", marker = "extra == 'analysis'" },
     { name = "mypy", marker = "extra == 'dev'" },
+    { name = "ns-py" },
     { name = "packaging", specifier = ">=24.2" },
     { name = "pandas", marker = "extra == 'analysis'" },
     { name = "pillow" },
@@ -1495,6 +1512,7 @@ requires-dist = [
     { name = "torch", specifier = ">=2.6.0" },
     { name = "torch", marker = "extra == 'torch'" },
     { name = "torchvision", marker = "extra == 'torch'" },
+    { name = "tqdm" },
 ]
 provides-extras = ["dev", "torch", "analysis"]
 
@@ -1935,6 +1953,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/54/d2/92fa3243712b9a3e8bafaf60aac366da1cada3639ca767ff4b5b3654ec28/notebook_shim-0.2.4.tar.gz", hash = "sha256:b4b2cfa1b65d98307ca24361f5b30fe785b53c3fd07b7a47e89acb5e6ac638cb", size = 13167, upload-time = "2024-02-14T23:35:18.353Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f9/33/bd5b9137445ea4b680023eb0469b2bb969d61303dedb2aac6560ff3d14a1/notebook_shim-0.2.4-py3-none-any.whl", hash = "sha256:411a5be4e9dc882a074ccbcae671eda64cceb068767e9a3419096986560e1cef", size = 13307, upload-time = "2024-02-14T23:35:16.286Z" },
+]
+
+[[package]]
+name = "ns-py"
+version = "0.4.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "networkx" },
+    { name = "pyyaml" },
+    { name = "simpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8f/47/1cbffe093013b288ef610f1886017fdeea5c2078b3f6cb6b77a5ac94ce75/ns.py-0.4.3.tar.gz", hash = "sha256:6001cbc31a79f75c4a6136c708c3214a1942fdff4ebb86928eafd16d28ba53ba", size = 51089, upload-time = "2024-02-06T18:14:39.329Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d3/fc/a99ad06ca5d146dc0a088a3b1c2be1b973b3f7426c6e46efe5a96873b3af/ns.py-0.4.3-py37.py38.py39-none-any.whl", hash = "sha256:31286e4325d54c961b10413d4d03627cfa5bd2e92eba46f7ee4bd65e4991e706", size = 66754, upload-time = "2024-02-06T18:14:37.563Z" },
 ]
 
 [[package]]
@@ -3246,6 +3278,15 @@ wheels = [
 ]
 
 [[package]]
+name = "simpy"
+version = "4.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a8/66/860505ec021a16f9d8cf4b8c4d60ee07bb427649b643312303698c93b551/simpy-4.1.1.tar.gz", hash = "sha256:06d0750a7884b11e0e8e20ce0bc7c6d4ed5f1743d456695340d13fdff95001a6", size = 408997, upload-time = "2023-11-13T03:39:04.909Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/72/920ed1224c94a8a5a69e6c1275ac7fe4eb911ba8feffddf469f1629d47f3/simpy-4.1.1-py3-none-any.whl", hash = "sha256:7c5ae380240fd2238671160e4830956f8055830a8317edf5c05e495b3823cd88", size = 27224, upload-time = "2023-11-13T03:39:03.362Z" },
+]
+
+[[package]]
 name = "six"
 version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3552,6 +3593,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e8/59/593bd0f40f7355806bf6573b47b8c22f8e1374c9b6fd03114bd6b7a3dcfd/tornado-6.5.2-cp39-abi3-win32.whl", hash = "sha256:c6f29e94d9b37a95013bb669616352ddb82e3bfe8326fccee50583caebc8a5f0", size = 445023, upload-time = "2025-08-08T18:26:56.677Z" },
     { url = "https://files.pythonhosted.org/packages/c7/2a/f609b420c2f564a748a2d80ebfb2ee02a73ca80223af712fca591386cafb/tornado-6.5.2-cp39-abi3-win_amd64.whl", hash = "sha256:e56a5af51cc30dd2cae649429af65ca2f6571da29504a07995175df14c18f35f", size = 445427, upload-time = "2025-08-08T18:26:57.91Z" },
     { url = "https://files.pythonhosted.org/packages/5e/4f/e1f65e8f8c76d73658b33d33b81eed4322fb5085350e4328d5c956f0c8f9/tornado-6.5.2-cp39-abi3-win_arm64.whl", hash = "sha256:d6c33dc3672e3a1f3618eb63b7ef4683a7688e7b9e6e8f0d9aa5726360a004af", size = 444456, upload-time = "2025-08-08T18:26:59.207Z" },
+]
+
+[[package]]
+name = "tqdm"
+version = "4.67.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl", hash = "sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2", size = 78540, upload-time = "2024-11-24T20:12:19.698Z" },
 ]
 
 [[package]]

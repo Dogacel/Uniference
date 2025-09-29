@@ -37,6 +37,8 @@ def maybe_reshard_state_dict(
     moe_num_experts: Optional[int] = None,
     map_location: Union[str, torch.device] = "cpu",
     mmap: bool = True,
+    new_mp_size: Optional[int] = None,
+    new_mp_rank: Optional[int] = None,
 ) -> Dict[str, torch.Tensor]:
     if str(map_location) == "cpu":
         torch.set_default_tensor_type(torch.BFloat16Tensor)
@@ -45,7 +47,13 @@ def maybe_reshard_state_dict(
 
     ckpt_paths = np.array(sorted(ckpt_paths))
 
-    new_mp_size, new_mp_rank = get_model_parallel_world_size(), get_model_parallel_rank()
+    if new_mp_size is None:
+        new_mp_size = get_model_parallel_world_size()
+    if new_mp_rank is None:
+        new_mp_rank = get_model_parallel_rank()
+
+    print("Assuming current MP rank as the new MP rank:", new_mp_rank)
+
     old_mp_size = len(ckpt_paths)
     old_mp_ranks = map_mp_rank(old_mp_size, new_mp_size, new_mp_rank)
 

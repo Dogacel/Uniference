@@ -16,12 +16,10 @@ import fairscale.nn.model_parallel.initialize as fs_init
 import torch
 from torch import Tensor
 import torch.nn.functional as F
-from fairscale.nn.model_parallel.layers import (
-    ColumnParallelLinear,
-    RowParallelLinear,
-    VocabParallelEmbedding,
-)
 from torch import nn
+
+from models.llama3_tp.components import ColumnParallelLinearSim, RowParallelLinearSim, VocabParallelEmbeddingSim
+from simsuite.device import Device
 
 from .args import ModelArgs
 
@@ -111,39 +109,47 @@ class Attention(nn.Module):
     def __init__(self, layer_id: int, args: ModelArgs):
         super().__init__()
         self.n_kv_heads = args.n_heads if args.n_kv_heads is None else args.n_kv_heads
-        world_size = fs_init.get_model_parallel_world_size()
+
+        if args.me.world.backend == "pytorch":
+            world_size = fs_init.get_model_parallel_world_size()
+        else:
+            world_size = len(args.me.world.devices)
+
         self.n_local_heads = args.n_heads // world_size
         self.n_local_kv_heads = self.n_kv_heads // world_size
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
         self.head_dim = args.dim // args.n_heads
         self.me = args.me
         self.layer_id = layer_id
-        self.yield_probability = args.yield_probability
 
-        self.wq = ColumnParallelLinear(
+        self.wq = ColumnParallelLinearSim(
             args.dim,
             args.n_heads * self.head_dim,
+            me=self.me,
             bias=False,
             gather_output=False,
             init_method=lambda x: x,
         )
-        self.wk = ColumnParallelLinear(
+        self.wk = ColumnParallelLinearSim(
             args.dim,
             self.n_kv_heads * self.head_dim,
+            me=self.me,
             bias=False,
             gather_output=False,
             init_method=lambda x: x,
         )
-        self.wv = ColumnParallelLinear(
+        self.wv = ColumnParallelLinearSim(
             args.dim,
             self.n_kv_heads * self.head_dim,
+            me=self.me,
             bias=False,
             gather_output=False,
             init_method=lambda x: x,
         )
-        self.wo = RowParallelLinear(
+        self.wo = RowParallelLinearSim(
             args.n_heads * self.head_dim,
             args.dim,
+            me=self.me,
             bias=False,
             input_is_parallel=True,
             init_method=lambda x: x,
@@ -232,6 +238,7 @@ class FeedForward(nn.Module):
         hidden_dim: int,
         multiple_of: int,
         ffn_dim_multiplier: Optional[float],
+        me: Device,
     ):
         super().__init__()
         hidden_dim = int(2 * hidden_dim / 3)
@@ -240,9 +247,9 @@ class FeedForward(nn.Module):
             hidden_dim = int(ffn_dim_multiplier * hidden_dim)
         hidden_dim = multiple_of * ((hidden_dim + multiple_of - 1) // multiple_of)
 
-        self.w1 = ColumnParallelLinear(dim, hidden_dim, bias=False, gather_output=False, init_method=lambda x: x)
-        self.w2 = RowParallelLinear(hidden_dim, dim, bias=False, input_is_parallel=True, init_method=lambda x: x)
-        self.w3 = ColumnParallelLinear(dim, hidden_dim, bias=False, gather_output=False, init_method=lambda x: x)
+        self.w1 = ColumnParallelLinearSim(dim, hidden_dim, me=me, bias=False, gather_output=False, init_method=lambda x: x)
+        self.w2 = RowParallelLinearSim(hidden_dim, dim, me=me, bias=False, input_is_parallel=True, init_method=lambda x: x)
+        self.w3 = ColumnParallelLinearSim(dim, hidden_dim, me=me, bias=False, gather_output=False, init_method=lambda x: x)
 
     def forward(self, x):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
@@ -260,6 +267,7 @@ class TransformerBlock(nn.Module):
             hidden_dim=4 * args.dim,
             multiple_of=args.multiple_of,
             ffn_dim_multiplier=args.ffn_dim_multiplier,
+            me=args.me,
         )
         self.layer_id = layer_id
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
@@ -290,14 +298,14 @@ class Transformer(nn.Module):
         self.vocab_size = params.vocab_size
         self.n_layers = params.n_layers
 
-        self.tok_embeddings = VocabParallelEmbedding(params.vocab_size, params.dim, init_method=lambda x: x)
+        self.tok_embeddings = VocabParallelEmbeddingSim(params.vocab_size, params.dim, init_method=lambda x: x, me=params.me)
 
         self.layers = torch.nn.ModuleList()
         for layer_id in range(params.n_layers):
             self.layers.append(TransformerBlock(layer_id, params))
 
         self.norm = RMSNorm(params.dim, eps=params.norm_eps)
-        self.output = ColumnParallelLinear(params.dim, params.vocab_size, bias=False, init_method=lambda x: x)
+        self.output = ColumnParallelLinearSim(params.dim, params.vocab_size, me=params.me, bias=False, init_method=lambda x: x)
 
         self.freqs_cis = precompute_freqs_cis(
             params.dim // params.n_heads,
@@ -355,9 +363,8 @@ class Transformer(nn.Module):
 
         for i, layer in enumerate(self.layers):
             h = layer(h, start_pos, freqs_cis, mask)
-            if random.random() < self.params.yield_probability:
-                self.params.me.world.xyield(self.params.me, "random yield")
 
         h = self.norm(h)
         output = self.output(h).float()
         return output
+

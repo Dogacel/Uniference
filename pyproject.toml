@@ -22,6 +22,9 @@ dependencies = [
     "greenlet>=3.2.4",
     "fire>=0.7.0",
     "packaging>=24.2",
+    "ns.py",
+    "tqdm",
+    "ftfy",
 ]
 classifiers = []
 

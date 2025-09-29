@@ -1,10 +1,11 @@
 from __future__ import annotations
 import os
 
+import simpy
 import torch
 
 from time import perf_counter
-from typing import Optional, Callable, Any
+from typing import Literal, Optional, Callable, Any
 from greenlet import greenlet
 
 from simsuite.chan import Chan
@@ -15,6 +16,9 @@ from simsuite.network import Network, NetworkArgs
 from simsuite.profiler import TorchProfiler
 from simsuite.units import ms
 
+from ns.packet.sink import PacketSink
+from ns.port.wire import Wire
+from ns.switch.switch import SimplePacketSwitch
 
 class PreparedEvent:
     event_type: str
@@ -47,7 +51,6 @@ def get_device():
         return "xpu"
     return "cpu"
 
-
 class World:
     devices: list[Device]
     networks: list[Network]
@@ -62,6 +65,8 @@ class World:
     debug_run: bool
     output_file: str
 
+    backend: Literal['simulation', 'pytorch']
+
     def __init__(self, **kwargs) -> None:
         self.devices = []
         self.networks = []
@@ -74,13 +79,34 @@ class World:
         self.debug_run = kwargs.get("debug_run", False)
         self.output_file = kwargs.get("output_file", "results/run_report.json")
         self.device_type = get_device()
+        self.backend = kwargs.get("backend", "simulation")
+
+        print("Using backend:", self.backend)
+
+        self.simpy_env = simpy.Environment()
+        self.router = SimplePacketSwitch(
+            self.simpy_env,
+            nports=1,
+            port_rate=10_000_000,
+            buffer_size=100,
+            debug=False,
+        )
+
 
     def device(self, deviceArgs: DeviceArgs, program: Program):
         device = Device(deviceArgs, program, self)
         self.devices.append(device)
         self.device_states[device] = DeviceState()
         device.state = self.device_states[device]
-        device.initialize()
+
+        device.wire_up = Wire(self.simpy_env, deviceArgs.spec.inherent_latency)
+        device.wire_down = Wire(self.simpy_env, deviceArgs.spec.inherent_latency)
+
+        device.sink = PacketSink(self.simpy_env, rec_flow_ids=True)
+
+        device.wire_up.out = self.router
+        device.wire_down.out = device.sink
+
         self.event_logger.log_event({"device": device.name, "action": "created"})
         return device
 
@@ -173,6 +199,7 @@ class World:
             device.state.sync_clock()
 
         for device in self.devices:
+            device.initialize()
             self._runq.append(
                 (
                     device,
