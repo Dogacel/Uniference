@@ -11,16 +11,16 @@ PROMPT_5000 := $(shell cat ./checkpoints/prompt_5000.txt)
 RUN_ID=$(shell date +%s)
 
 pdebug: clear_prof
-	DEVICE=mps DEBUG=1 ./run.sh scenarios.yield_perf_scenario \
-		--device_count=1 \
-		--prompt="${PROMPT_1000}" \
+	DEVICE=cpu DEBUG=1 ./run.sh scenarios.yield_perf_scenario \
+		--device_count=4 \
+		--prompt="${PROMPT_500}" \
 		--max_seq_len=4096 \
 		--max_tokens=25 \
-		--yield_probability=1.0 \
+		--yield_probability=0.0 \
 # 		--performance_mode \
 # 		--debug_run \
 
-	uv run simsuite/trace_merger.py results/${RUN_ID}_yield_perf.json profile_out --normalize-logical-clock
+#	uv run simsuite/trace_merger.py results/${RUN_ID}_yield_perf.json profile_out --normalize-logical-clock
 
 debug: clear_prof
     # Warmup 

@@ -272,7 +272,7 @@ class World:
 
                 state.last_run_time = perf_counter()
 
-                if not device.state.warmup:
+                if self.debug_run and not device.state.warmup:
                     with TorchProfiler(
                         out_dir="profile_out",
                         trace_name=f"{device.name}_run",
@@ -287,6 +287,7 @@ class World:
                 else:
                     g.switch()
                     # state.sync_clock()
+                    yield_count += 1
 
                 id += 1
 
