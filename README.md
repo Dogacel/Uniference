@@ -72,6 +72,8 @@ Currently only way to run a simulation is to run it on your local device. You ca
 
 ### Jetson Nano Orin DevKit
 
+Use the following commands to setup the benchmark.
+
 ```shell
 git config --global credential.helper store
 git clone https://github.com/Dogacel/edge-llm-benchmark.git
@@ -83,8 +85,46 @@ source $HOME/.local/bin/env
 
 uv sync --all-extras
 
-# On host run
-scp checkpoints/prompt_*.txt orin@orin-0:/home/orin/edge-llm-benchmark/checkpoints
+uvx --from huggingface_hub huggingface-cli download meta-llama/Llama-3.2-1B-Instruct \
+  --include "original/*" \
+  --local-dir checkpoints/Llama-3.2-1B-Instruct
 
-make pdebug
+make sanity 
+```
+
+#### Tensor Parallelism
+
+To run tensor parallel example on multiple devices, run the following for each device.
+
+Leader device,
+
+```shell
+# Note the local ip of the leader, usually in form 192.168.x.x or 10.0.0.x
+ip -4 addr show scope global | grep inet
+
+export MASTER_ADDR=192.168.1.14
+export MASTER_PORT=25001
+export GLOO_SOCKET_IFNAME=enP8p1s0
+
+export RANK=0
+export LOCAL_RANK=1
+
+# Update world size if needed
+export WORLD_SIZE=2
+```
+
+Follower devices,
+
+```shell
+# Replace master addr with the result found above.
+export MASTER_ADDR=192.168.1.14
+export MASTER_PORT=25001
+export GLOO_SOCKET_IFNAME=enP8p1s0
+
+# Update rank for each device
+export RANK=1
+export LOCAL_RANK=1
+
+# Update world size if needed
+export WORLD_SIZE=2
 ```
