@@ -28,6 +28,13 @@ sanity: clear_prof
 		--max_seq_len=512 \
 		--max_tokens=10 \
 
+sanity_cuda: clear_prof
+	DEVICE=cuda DEBUG=1 ./run.sh scenarios.concurrent_scenario \
+		--device_count=1 \
+		--prompt="${PROMPT_100}" \
+		--max_seq_len=512 \
+		--max_tokens=10 \
+
 clear_prof:
 	rm -rf profile_out
 	mkdir profile_out

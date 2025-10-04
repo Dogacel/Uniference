@@ -89,7 +89,28 @@ uvx --from huggingface_hub huggingface-cli download meta-llama/Llama-3.2-1B-Inst
   --include "original/*" \
   --local-dir checkpoints/Llama-3.2-1B-Instruct
 
-make sanity 
+make sanity
+```
+
+For CUDA support,
+
+```shell
+export DEVICE=cuda
+
+sudo apt install nvidia-jetpack
+
+export CUDA_VERSION=12.6
+
+wget https://raw.githubusercontent.com/pytorch/pytorch/a11a66ef320938cd0fd72b44b2b572b06937e100/.ci/docker/common/install_cusparselt.sh
+sudo -E bash ./install_cusparselt.sh
+
+# Trick to make cudss installation work
+export CUDA_VERSION=12.4
+wget -qO install_cudss.sh https://raw.githubusercontent.com/pytorch/pytorch/main/.ci/docker/common/install_cudss.sh
+sudo -E bash ./install_cudss.sh
+
+# Modify pyproject.toml to replace torch constraint with this,
+# "torch @ https://pypi.jetson-ai-lab.io/jp6/cu126/+f/590/92ab729aee2b8/torch-2.8.0-cp310-cp310-linux_aarch64.whl#sha256=59092ab729aee2b8937d80cc1b35d1128275bd02a7e1bc911e7efa375bd97226",
 ```
 
 #### Tensor Parallelism
@@ -107,7 +128,6 @@ export MASTER_PORT=25001
 export GLOO_SOCKET_IFNAME=enP8p1s0
 
 export RANK=0
-export LOCAL_RANK=1
 
 # Update world size if needed
 export WORLD_SIZE=2
@@ -123,7 +143,6 @@ export GLOO_SOCKET_IFNAME=enP8p1s0
 
 # Update rank for each device
 export RANK=1
-export LOCAL_RANK=1
 
 # Update world size if needed
 export WORLD_SIZE=2

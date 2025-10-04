@@ -7,6 +7,7 @@ import torch
 from time import perf_counter
 from typing import Literal, Optional, Callable, Any
 from greenlet import greenlet
+from torch.distributed import destroy_process_group
 
 from simsuite.chan import Chan
 from simsuite.dependency import Dependency
@@ -318,3 +319,6 @@ class World:
             output_file=self.output_file,
             params=self.runtime_params | {"yield_count": yield_count},
         )
+
+        if self.device_type == "cuda":
+            destroy_process_group()
