@@ -11,7 +11,9 @@ We recommend running _Llama 3_ models. To get started, download the LLama model 
 ```shell
 
 mkdir checkpoints
-huggingface-cli download meta-llama/Llama-3.2-1B-Instruct --include "original/*" --local-dir checkpoints/Llama-3.2-1B-Instruct
+uvx --from huggingface_hub huggingface-cli download meta-llama/Llama-3.2-1B-Instruct \
+  --include "original/*" \
+  --local-dir checkpoints/Llama-3.2-1B-Instruct
 
 ```
 
@@ -64,4 +66,25 @@ Currently only way to run a simulation is to run it on your local device. You ca
 
 ```shell
 ./run.sh scenarios.synchronize_scenario --device_count=2 --prompt="Don't say anything else, just count from 1 to 10."
+```
+
+## Experiment Setup
+
+### Jetson Nano Orin DevKit
+
+```shell
+git config --global credential.helper store
+git clone https://github.com/Dogacel/edge-llm-benchmark.git
+# Use generated read-only API token
+
+cd edge-llm-benchmark
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+
+uv sync --all-extras
+
+# On host run
+scp checkpoints/prompt_*.txt orin@orin-0:/home/orin/edge-llm-benchmark/checkpoints
+
+make pdebug
 ```

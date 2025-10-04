@@ -88,7 +88,7 @@ class TensorParallelProgram(Program):
         input: Optional[list[RawMessage]] = None
         input = world.chan("input").receive(me)
 
-        def evaluate(model: Llama3, dialog: list[RawMessage]):
+        def evaluate(model: Llama3, dialog: list[RawMessage], exit_early: bool = False):
             batch = [dialog]
 
             generated_token_count = 0
@@ -119,6 +119,13 @@ class TensorParallelProgram(Program):
             print("\n")
 
         if input is not None:
+            # for msg in input:
+            #     evaluate(model, [msg], exit_early=True)
+            #     model.clean_cache()
+
+            # world.xyield(me, "warmup")
+            # world.reset_clock()
+
             for msg in input:
                 print(f"{msg.role.capitalize()}: {msg.content}\n")
                 evaluate(model, [msg])

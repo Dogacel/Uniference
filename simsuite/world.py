@@ -139,6 +139,12 @@ class World:
             if device is not None:
                 device.state.last_run_time = perf_counter()
 
+    def reset_clock(self):
+        for state in self.device_states.values():
+            state.clock = 0.0
+            state.last_run_time = perf_counter()
+        self.max_time = 0.0
+
     def set_runtime_params(self, params: dict[str, Any]):
         self.runtime_params = params
 

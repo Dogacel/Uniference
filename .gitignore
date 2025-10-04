@@ -4,8 +4,11 @@ dist
 build
 .DS_Store
 .vscode/
-checkpoints
 event_log.jsonl
 results/
 profile_out
 out.json
+
+checkpoints/*
+!checkpoints/prompt_1000.txt
+!checkpoints/prompt_5000.txt
