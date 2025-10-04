@@ -11,7 +11,7 @@ PROMPT_5000 := $(shell cat ./checkpoints/prompt_5000.txt)
 RUN_ID=$(shell date +%s)
 
 profile: clear_prof
-	DEVICE=cpu DEBUG=1 ./run.sh scenarios.concurrent_scenario \
+	DEVICE=cpu ./run.sh scenarios.concurrent_scenario \
 		--device_count=2 \
 		--prompt="${PROMPT_500}" \
 		--max_seq_len=4096 \
@@ -22,18 +22,20 @@ profile: clear_prof
 	uv run simsuite/trace_merger.py results/${RUN_ID}_yield_perf.json profile_out --normalize-logical-clock
 
 sanity: clear_prof
-	DEVICE=cpu DEBUG=1 ./run.sh scenarios.concurrent_scenario \
+	DEVICE=cpu ./run.sh scenarios.yield_scenario \
 		--device_count=1 \
 		--prompt="${PROMPT_100}" \
 		--max_seq_len=512 \
 		--max_tokens=10 \
+		--yield_probability=1.0
 
 sanity_cuda: clear_prof
-	DEVICE=cuda DEBUG=1 ./run.sh scenarios.concurrent_scenario \
+	DEVICE=cuda ./run.sh scenarios.yield_scenario \
 		--device_count=1 \
 		--prompt="${PROMPT_100}" \
 		--max_seq_len=512 \
 		--max_tokens=10 \
+		--yield_probability=1.0
 
 clear_prof:
 	rm -rf profile_out

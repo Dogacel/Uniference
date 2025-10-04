@@ -203,6 +203,8 @@ class World:
         def device_run_wrapper(device: Device):
             device.state.last_run_time = perf_counter()
             device.run()
+            if self.device_type == "cuda":
+                torch.cuda.synchronize()
             device.state.sync_clock()
 
         for device in self.devices:
