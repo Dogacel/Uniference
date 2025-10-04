@@ -22,7 +22,7 @@ profile: clear_prof
 	uv run simsuite/trace_merger.py results/${RUN_ID}_yield_perf.json profile_out --normalize-logical-clock
 
 sanity: clear_prof
-	DEVICE=cpu ./run.sh scenarios.yield_scenario \
+	DEVICE=cpu ./run.sh scenarios.yield_perf_scenario \
 		--device_count=1 \
 		--prompt="${PROMPT_100}" \
 		--max_seq_len=512 \
@@ -30,7 +30,7 @@ sanity: clear_prof
 		--yield_probability=1.0
 
 sanity_cuda: clear_prof
-	DEVICE=cuda ./run.sh scenarios.yield_scenario \
+	DEVICE=cuda ./run.sh scenarios.yield_perf_scenario \
 		--device_count=1 \
 		--prompt="${PROMPT_100}" \
 		--max_seq_len=512 \
