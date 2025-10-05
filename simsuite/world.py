@@ -1,8 +1,8 @@
 from __future__ import annotations
 import os
 
-import simpy
 import torch
+import gc
 
 from time import perf_counter
 from typing import Literal, Optional, Callable, Any
@@ -10,16 +10,12 @@ from greenlet import greenlet
 from torch.distributed import destroy_process_group
 
 from simsuite.chan import Chan
-from simsuite.dependency import Dependency
 from simsuite.device import Device, DeviceArgs, DeviceState
 from simsuite.event_logger import WorldEventLogger
 from simsuite.network import Network, NetworkArgs
 from simsuite.profiler import TorchProfiler
-from simsuite.units import ms
+from . import dprint
 
-from ns.packet.sink import PacketSink
-from ns.port.wire import Wire
-from ns.switch.switch import SimplePacketSwitch
 
 class PreparedEvent:
     event_type: str
@@ -42,6 +38,9 @@ class Program:
     def run(self) -> None:
         raise NotImplementedError
 
+    def warmup(self) -> None:
+        raise NotImplementedError
+
 
 def get_device():
     if "DEVICE" in os.environ:
@@ -52,6 +51,7 @@ def get_device():
         return "xpu"
     return "cpu"
 
+
 class World:
     devices: list[Device]
     networks: list[Network]
@@ -61,12 +61,12 @@ class World:
 
     device_states: dict[Device, DeviceState]
     max_time: float
-    _runq = []  # round-robin queue of runnable greenlets
+    _runq: list[tuple[Device, greenlet]] = []  # round-robin queue of runnable greenlets
     performance_mode: bool
     debug_run: bool
     output_file: str
 
-    backend: Literal['simulation', 'pytorch']
+    backend: Literal["simulation", "pytorch"]
 
     def __init__(self, **kwargs) -> None:
         self.devices = []
@@ -84,47 +84,20 @@ class World:
 
         print("Using backend:", self.backend)
 
-        self.simpy_env = simpy.Environment()
-        self.router = SimplePacketSwitch(
-            self.simpy_env,
-            nports=1,
-            port_rate=10_000_000,
-            buffer_size=100,
-            debug=False,
-        )
-
-
     def device(self, deviceArgs: DeviceArgs, program: Program):
         device = Device(deviceArgs, program, self)
         self.devices.append(device)
         self.device_states[device] = DeviceState()
         device.state = self.device_states[device]
 
-        device.wire_up = Wire(self.simpy_env, deviceArgs.spec.inherent_latency)
-        device.wire_down = Wire(self.simpy_env, deviceArgs.spec.inherent_latency)
-
-        device.sink = PacketSink(self.simpy_env, rec_flow_ids=True)
-
-        device.wire_up.out = self.router
-        device.wire_down.out = device.sink
-
         self.event_logger.log_event({"device": device.name, "action": "created"})
         return device
 
     def network(self, networkArgs: NetworkArgs):
         network = Network(networkArgs)
+        network.world = self
         self.networks.append(network)
         return network
-
-    def latency_between(self, device: Device, other_device: Device, transfer_size: float = 0) -> float:
-        if device == other_device:
-            return 0.0
-        connections = [conn for conn in self.networks if device in conn.devices and other_device in conn.devices]
-        if connections:
-            return min(conn.latency for conn in connections) + (
-                transfer_size / max(conn.bandwidth for conn in connections)
-            )
-        raise ValueError("No network connection found")
 
     def xyield(self, device: Optional[Device], event_type: str, data: Optional[Any] = None):
         g = greenlet.getcurrent().parent
@@ -140,12 +113,6 @@ class World:
             if device is not None:
                 device.state.last_run_time = perf_counter()
 
-    def reset_clock(self):
-        for state in self.device_states.values():
-            state.clock = 0.0
-            state.last_run_time = perf_counter()
-        self.max_time = 0.0
-
     def set_runtime_params(self, params: dict[str, Any]):
         self.runtime_params = params
 
@@ -158,40 +125,36 @@ class World:
         self.event_logger.log_event({"chan": tag, "action": "created"})
         return new_chan
 
-    def print_stats(self, start_time: float) -> None:
-        end_time = perf_counter()
-        print("\n")
-        print(f"Time taken: {end_time - start_time:.2f} seconds")
+    @torch.inference_mode()
+    def run(self, debug_run: bool = False, warmup: bool = False):
+        self._run(debug_run=debug_run, warmup=warmup)
 
-        for chan in self.chans:
-            print(f"{chan.name}.total_transferred_bytes: {chan.total_transferred_bytes / 1_000_000:.2f} MB")
-            print(f"{chan.name}.total_transferred_count: {chan.total_transferred_count}")
-            print(
-                f"{chan.name} bandwith used: {chan.total_transferred_bytes / 1_000_000 / (end_time - start_time):.2f} MB/s"
-            )
+        # Post-run cleanup
+        self.events = []
+        self.event_logger.events = []
 
-            chan.reset_counters()
-
-    def after_time(self, duration: float) -> PreparedEvent:
-        event = PreparedEvent()
-        event.condition = lambda world: world.max_time >= duration
-        self.events.append(event)
-        return event
-
-    def add_dependency(self, device: Device, dependency: Dependency):
-        self.device_states[device].dependencies.append(dependency)
-
-    def reset_timers(self):
         for state in self.device_states.values():
             state.clock = 0.0
             state.last_run_time = perf_counter()
+            state.dependency = None
+
+        for device in self.devices:
+            device.terminated = False
+
+        for network in self.networks:
+            network.internal_clock = 0.0
+            network.transmits = []
+
+        for chan in self.chans:
+            chan.listeners = []
+            # chan.subscribers = []
+
+        self._runq = []
         self.max_time = 0.0
 
-    @torch.inference_mode()
-    def run(self):
-        self._run()
+        gc.collect()
 
-    def _run(self):
+    def _run(self, debug_run: bool, warmup: bool):
         # The devices calling calls such as chan("foo").receive() should create dependencies on other channels.
         # Those dependencies will be modelled as graphs, each step will check if the dependencies of each request
         # is satisfied or not. This graph traversal also makes sure there are no deadlocks.
@@ -202,7 +165,7 @@ class World:
 
         def device_run_wrapper(device: Device):
             device.state.last_run_time = perf_counter()
-            device.run()
+            device.run(warmup=warmup)
             if self.device_type == "cuda":
                 torch.cuda.synchronize()
             device.state.sync_clock()
@@ -216,26 +179,9 @@ class World:
                 )
             )
 
-        deadlock_graph: list[Device] = list()
         id = 0
         yield_count = 0
-
-        # Calculate yield normalization factor
-        start_time = perf_counter()
-        end_time = perf_counter()
-
-        def gr_perf():
-            nonlocal start_time, end_time
-            end_time = perf_counter()
-            g = greenlet.getcurrent().parent
-            g.switch()
-            start_time = perf_counter()
-
-        gr = greenlet(gr_perf)
-        gr.switch()
-        gr.switch()
-
-        print(f"Yield overhead: {(end_time - start_time) * 1_000_000:.2f} us")
+        deadlock_checks = 0
 
         # Event loop
         while self._runq:
@@ -243,7 +189,6 @@ class World:
                 if event.condition(self):
                     event.callback()
                     self.events.remove(event)
-
             device, g = self._runq.pop(0)
             state = self.device_states[device]
 
@@ -251,32 +196,56 @@ class World:
                 print(f"Device {device.name} is terminated after {state.clock} seconds")
                 continue
 
-            if len(deadlock_graph) == sum(1 if not d.terminated else 0 for d in self.devices):
-                state.clock += 1 * ms
-                self.max_time = max(self.max_time, state.clock)
+            # Simulate network
 
-            # If we are at max_time, but not all devices are terminated and have their dependencies met,
-            if state.clock == self.max_time and not all(
-                state.clock == self.max_time
-                if not device.terminated and all(dep.condition() for dep in state.dependencies)
-                else True
-                for device, state in self.device_states.items()
-            ):
+            # A network simulation can only run up to the point where the next transmit completes
+            # or the next device becomes runnable. Because otherwise, the bandwidth sharing simulation won't be correct.
+            run_until = min(
+                (
+                    device.state.clock
+                    for device in self.devices
+                    if not device.terminated and device.state.dependency is None
+                ),
+                default=float("inf"),
+            )
+
+            # Step all networks.
+            for network in self.networks:
+                t, transmit = network.step(
+                    max_time=run_until,
+                )
+
+                # No in-flight transmits
+                if t == -1:
+                    deadlock_checks += 1
+                    if deadlock_checks > len(self.devices) * 2:
+                        if all(d.state.dependency is not None for d in self.devices if not d.terminated):
+                            for d in self.devices:
+                                if not d.terminated and d.state.dependency is not None:
+                                    dprint(f"Deadlock detected: device {d.name} is waiting on {d.state.dependency}")
+                            raise RuntimeError("Deadlock detected: all devices are waiting but no network activity")
+                    continue
+
+                deadlock_checks = 0
+                # Move time forward if needed
+                self.max_time = max(self.max_time, t)
+
+            # Only simulate the device that has the lowest clock time and is runnable.
+            # If the device is at max_time, it can only run if every other device is also at max_time.
+            other_device_times = [
+                d.state.clock for d in self.devices if d != device and not d.terminated and d.state.dependency is None
+            ]
+            if state.clock == self.max_time and not all(t == self.max_time for t in other_device_times):
+                dprint(f"Device {device.name} at max_time {self.max_time} but others are not: {other_device_times}")
                 self._runq.append((device, g))
                 continue
 
-            dependencies = state.dependencies
+            dependency_completed = hasattr(state.dependency, "completed") and state.dependency.completed()
+            if dependency_completed:
+                state.clock = max(state.clock, state.dependency.end_time)
 
-            if all(dep.condition() for dep in dependencies):
-                dependency_times = [dep.time() for dep in dependencies]
-                dependency_times = [time if time is not None else 0 for time in dependency_times]
-                if dependency_times:
-                    state.clock = max(state.clock, max(dependency_times))
-
-                dependencies.clear()
-                if device in deadlock_graph:
-                    deadlock_graph.remove(device)
-
+            # Device is runnable if no network dependency exists or the dependency is completed.
+            if state.dependency is None or dependency_completed:
                 self.event_logger.log_event({"device": device.name, "action": "running", "time": state.clock})
 
                 state.last_run_time = perf_counter()
@@ -287,24 +256,21 @@ class World:
                         trace_name=f"{device.name}_run",
                         id=str(id),
                         report=self.debug_run,
-                    ) as P:
+                    ) as p:
                         torch.autograd._add_metadata_json("logical_clock", str(state.clock))
-                        with P.record("device_run"):
+                        with p.record("device_run"):
                             g.switch()
-                            # state.sync_clock()
                             yield_count += 1
+                            id += 1
                 else:
                     g.switch()
-                    # state.sync_clock()
                     yield_count += 1
 
-                id += 1
-
                 self.event_logger.log_event({"device": device.name, "action": "idle", "time": state.clock})
+
                 self.max_time = max(self.max_time, state.clock)
             else:
-                if device not in deadlock_graph:
-                    deadlock_graph.append(device)
+                dprint(f"Device {device.name} yielding on dependency {state.dependency}")
 
             if not g.dead:
                 self._runq.append((device, g))
@@ -313,14 +279,13 @@ class World:
                 self.event_logger.log_event({"device": device.name, "action": "finished", "time": state.clock})
                 device.terminated = True
 
-        if self.debug_run:
+        if not debug_run:
             self.event_logger.dump_events()
-
-        self.event_logger.report_run(
-            time=self.max_time,
-            output_file=self.output_file,
-            params=self.runtime_params | {"yield_count": yield_count},
-        )
+            self.event_logger.report_run(
+                time=self.max_time,
+                output_file=self.output_file,
+                params=self.runtime_params | {"yield_count": yield_count},
+            )
 
         if self.device_type == "cuda":
             destroy_process_group()

@@ -37,6 +37,31 @@ sanity_cuda: clear_prof
 		--max_tokens=10 \
 		--yield_probability=1.0
 
+sanity_voltage: clear_prof
+	DEVICE=cpu ./run.sh scenarios.voltage_scenario \
+		--device_count=1 \
+		--prompt="${PROMPT_100}" \
+		--max_seq_len=512 \
+		--max_tokens=1 \
+		--program=voltage
+
+sanity_voltage_2: clear_prof
+	DEVICE=cpu ./run.sh scenarios.voltage_scenario \
+		--device_count=2 \
+		--prompt="${PROMPT_100}" \
+		--max_seq_len=512 \
+		--max_tokens=1 \
+		--program=voltage
+
+
+sanity_voltage_4: clear_prof
+	DEVICE=mps ./run.sh scenarios.voltage_scenario \
+		--device_count=4 \
+		--prompt="${PROMPT_1000}" \
+		--max_seq_len=4096 \
+		--max_tokens=1 \
+		--program=voltage
+
 clear_prof:
 	rm -rf profile_out
 	mkdir profile_out

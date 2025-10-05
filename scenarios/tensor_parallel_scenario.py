@@ -36,16 +36,23 @@ def run(
             deviceArgs=DeviceArgs(spec=device_spec, client=True, name=f"phone_{i + 1}"),
             program=TensorParallelProgram(),
         )
-        device.send("input", [RawMessage(role="user", content=prompt)])
         devices.append(device)
+        world.chan("input").subscribe(device)
+        world.chan("all_gather").subscribe(device)
 
     world.network(
         NetworkArgs(
             devices=devices,
-            bandwidth=5 * Gbps,
-            latency=0 * ms,
+            bandwidth=1 * Gbps,
+            latency=1 * ms,
         )
     )
+
+    # Warmup run
+    world.run(warmup=True)
+
+    for device in devices:
+        device.send("input", [RawMessage(role="user", content=prompt)], "starting_input", 0.0)
 
     world.run()
 

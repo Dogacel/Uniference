@@ -104,7 +104,7 @@ class VoltageProgram(Program):
 
                 if result.finished or generated_token_count >= self.max_tokens:
                     # Termination signal
-                    world.chan("pre_processed_input").all_gather(me, None)
+                    world.chan("pre_processed_input").broadcast(me, None, "tokens", force_send=True)
                     break
             print("\n")
 
@@ -114,10 +114,10 @@ class VoltageProgram(Program):
         world.chan("logits").subscribe(me)
 
         if me.client:
-            input: list[RawMessage] = world.chan("input").receive(me)
+            input: list[RawMessage] = world.chan("input").receive(me, "input")
             for msg in input:
                 print(f"{msg.role.capitalize()}: {msg.content}\n")
                 evaluate(model, [msg])
-                model.clean_cache()
+                # model.clean_cache()
         else:
             model.serve_forever()

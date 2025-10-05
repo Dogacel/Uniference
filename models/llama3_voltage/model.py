@@ -418,9 +418,9 @@ class Transformer(nn.Module):
             partition_end = splits[rank][-1].item() + 1  # +1 because slicing is exclusive
             mask = mask[partition_start:partition_end, :]
 
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             h = layer(h, start_pos, freqs_cis, mask)
-            h = world.chan("forward").all_gather(me, h)
+            h = world.chan("forward").all_gather(me, h, f"forward_{i}")
             h = torch.cat(h, dim=1)
 
         h = self.norm(h)

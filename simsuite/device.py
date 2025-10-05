@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from time import perf_counter
-from typing import Any, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from simsuite.dependency import Dependency
     from simsuite.world import Program, World
+    from simsuite.network import Transmit
 
 
 @dataclass
@@ -26,12 +26,7 @@ class DeviceArgs:
 
 @dataclass
 class DeviceState:
-    """
-    A list of function that returns whether the device is ready or not.
-    The device is ready if all dependencies return True.
-    """
-
-    dependencies: list[Dependency] = field(default_factory=list)
+    dependency: Optional[Transmit | str] = None
 
     """
     Current time perception for the device.
@@ -50,7 +45,7 @@ class DeviceState:
 
     def sync_clock(self) -> float:
         now = perf_counter()
-        self.clock += (now - self.last_run_time)
+        self.clock += now - self.last_run_time
         self.last_run_time = now
         return self.clock
 
@@ -65,14 +60,15 @@ class Device:
         self.terminated = False
         self.state: "DeviceState"
 
-
-
     def initialize(self):
         print(f"Initializing device {self.name}")
         self.program.initialize(self)
 
-    def run(self):
-        self.program.run()
+    def run(self, warmup: bool = False):
+        if warmup:
+            self.program.warmup()
+        else:
+            self.program.run()
 
     def terminate(self):
         self.world.event_logger.log_event(
@@ -80,9 +76,5 @@ class Device:
         )
         self.terminated = True
 
-    def send(self, chan: str, data: Any):
-        clock = self.world.device_states[self].clock if self in self.world.device_states else self.world.max_time
-        self.world.chan(chan).send(clock, data, self)
-
-    def latency_to(self, other: "Device") -> float:
-        return self.world.latency_between(self, other)
+    def send(self, chan: str, data: Any, transmit_id: str, force_time: Optional[float] = None):
+        self.world.chan(chan).send(self, data, transmit_id, force_time)

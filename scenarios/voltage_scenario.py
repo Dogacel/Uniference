@@ -40,9 +40,6 @@ def run(
             program=VoltageProgram() if program == "voltage" else VoltageBetterProgram(),
         )
 
-        if is_client:
-            device.send("input", [RawMessage(role="user", content=prompt)])
-
         devices.append(device)
 
     world.network(
@@ -52,6 +49,11 @@ def run(
             latency=10 * ms,
         )
     )
+
+    for device in devices:
+        if device.client:
+            device.send("input", [RawMessage(role="user", content=prompt)], "input", force_time=0.0)
+
 
     world.run()
 

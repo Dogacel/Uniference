@@ -85,7 +85,7 @@ class YieldPerfProgram(Program):
 
         # Non client machines will be listening for cache updates
         input: Optional[list[RawMessage]] = None
-        input = world.chan("input").receive(me)
+        input = world.chan("input").receive(me, "input")
 
         def evaluate(model: Llama3, dialog: list[RawMessage]):
             batch = [dialog]

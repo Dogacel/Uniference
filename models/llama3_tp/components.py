@@ -317,7 +317,7 @@ def reduce_from_model_parallel_region(input_: torch.Tensor, me: Device) -> torch
 
     # TODO: A network efficient implementation is possible.
 
-    result = me.world.chan("all_gather").all_gather(me, input_)
+    result = me.world.chan("all_gather").all_gather(me, input_, "reduce_from_model_parallel_region")
     result = torch.stack(result, dim=0).sum(dim=0)
     return result
 
@@ -333,7 +333,7 @@ def gather_from_model_parallel_region(input_: torch.Tensor, me: Device) -> torch
         print("Total overhead so far:", overhead_sum)
         return result
 
-    result = me.world.chan("all_gather").all_gather(me, input_)
+    result = me.world.chan("all_gather").all_gather(me, input_, "gather_from_model_parallel_region")
     result = torch.cat(result, dim=-1)
     return result
 

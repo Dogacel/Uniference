@@ -5,8 +5,6 @@
 # top-level folder for each specific model found within the models/ directory at
 # the top-level of this source tree.
 
-from simsuite.chan import SyncGen
-from simsuite.chan import SyncKVCache
 from torch.types import Device as TorchDevice
 from simsuite.device import Device
 import json
@@ -144,22 +142,22 @@ class Llama3:
         self.formatter = ChatFormat(tokenizer)
         self.gen_cache = []
 
-    def sync_kv_cache(self, msg: SyncKVCache):
-        self.model.sync_kv_cache(layer_id=msg.layer_id, start_pos=msg.start_pos, xk=msg.xk, xv=msg.xv)
+    # def sync_kv_cache(self, msg: SyncKVCache):
+    #     self.model.sync_kv_cache(layer_id=msg.layer_id, start_pos=msg.start_pos, xk=msg.xk, xv=msg.xv)
 
-    def sync_gen_cache(self, msg: SyncGen):
-        self.gen_cache.append(msg)
+    # def sync_gen_cache(self, msg: SyncGen):
+    #     self.gen_cache.append(msg)
 
-    def send_sync_gen(self, pos: int, next_token: torch.Tensor):
-        msg = SyncGen(pos=pos, next_token=next_token)
-        self.args.me.send("gen", msg)
+    # def send_sync_gen(self, pos: int, next_token: torch.Tensor):
+    #     msg = SyncGen(pos=pos, next_token=next_token)
+    #     self.args.me.send("gen", msg)
 
-    def clean_cache(self):
-        if isinstance(self.model, Transformer):
-            self.model.clean_cache()
-        else:
-            raise TypeError(f"Model is not a Transformer, but {type(self.model)}")
-        self.gen_cache.clear()
+    # def clean_cache(self):
+    #     if isinstance(self.model, Transformer):
+    #         self.model.clean_cache()
+    #     else:
+    #         raise TypeError(f"Model is not a Transformer, but {type(self.model)}")
+    #     self.gen_cache.clear()
 
     @torch.inference_mode()
     def generate(

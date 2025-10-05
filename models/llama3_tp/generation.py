@@ -5,8 +5,6 @@
 # top-level folder for each specific model found within the models/ directory at
 # the top-level of this source tree.
 
-from simsuite.chan import SyncGen
-from simsuite.chan import SyncKVCache
 from torch.types import Device as TorchDevice
 from simsuite.device import Device
 import json
