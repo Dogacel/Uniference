@@ -128,7 +128,7 @@ class Network:
         dprint("==============================")
 
         # Find the next transmit to complete.
-        available_transmits = [t for t in self.transmits if not t.completed()]
+        available_transmits = [t for t in self.transmits if not t.completed() and t.start_time <= self.internal_clock]
         first_to_end = min(available_transmits, key=end_time, default=None)
         # Find the time when the next transmit will end assuming there will be no changes in bandwidth.
         first_end_time = end_time(first_to_end)
@@ -188,6 +188,13 @@ class Network:
                 # Make sure the first to end is actually done, no rounding errors
                 first_to_end.transferred_so_far = first_to_end.size
                 first_to_end.end_time = self.internal_clock
-                self.world.event_logger.log_event({"time": self.internal_clock, "action": "transmit_end", "id": first_to_end.id})
+                self.world.event_logger.log_event(
+                    {
+                        "time": self.internal_clock,
+                        "action": "transmit_end",
+                        "id": first_to_end.id,
+                        "duration": self.latency + first_to_end.end_time - first_to_end.start_time,
+                    }
+                )
 
             return (self.internal_clock, transmit)

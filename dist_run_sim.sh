@@ -23,7 +23,7 @@ uv run python -m scenarios.tensor_parallel_scenario \
   --top_p 1.0 \
   --max_batch_size 1 \
   --world_size=2 \
-  --device_count=4 \
+  --device_count=2 \
   --prompt="${PROMPT_500}" \
   --max_seq_len=4096 \
   --max_tokens=25 \

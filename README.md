@@ -153,3 +153,21 @@ export WORLD_SIZE=2
 # Jetson Nano doesn't work with nccl
 export DIST_BACKEND=gloo
 ```
+
+## Network Simulation
+
+Use `ping` to get information about RTT.
+
+```shell
+ping 192.168.1.14 -c 100
+```
+
+Use `iperf3` to get information about bandwidth.
+
+```shell
+# On rank=0 device
+iperf3 -s
+
+# On the other device
+iperf3 -c 192.168.1.14 -t 30
+```

@@ -287,11 +287,24 @@ class VocabParallelEmbeddingSim(torch.nn.Module):
 
 def scatter_to_model_parallel_region(input_: torch.Tensor, me: Device) -> torch.Tensor:
     if me.world.backend == "pytorch":
+        me.world.event_logger.log_event(
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_start",
+                "size": input_.element_size() * input_.nelement(),
+            }
+        )
+
         start = perf_counter()
         result = stmpr(input_)
         end = perf_counter()
+
         me.world.event_logger.log_event(
-            {"time": start, "action": "scatter_to_model_parallel_region", "duration": end - start}
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_end",
+                "duration": end - start,
+            }
         )
         return result
 
@@ -304,11 +317,24 @@ def scatter_to_model_parallel_region(input_: torch.Tensor, me: Device) -> torch.
 
 def reduce_from_model_parallel_region(input_: torch.Tensor, me: Device) -> torch.Tensor:
     if me.world.backend == "pytorch":
+        me.world.event_logger.log_event(
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_start",
+                "size": input_.element_size() * input_.nelement(),
+            }
+        )
+
         start = perf_counter()
         result = rfmpr(input_)
         end = perf_counter()
+
         me.world.event_logger.log_event(
-            {"time": start, "action": "reduce_from_model_parallel_region", "duration": end - start}
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_end",
+                "duration": end - start,
+            }
         )
         return result
 
@@ -321,12 +347,26 @@ def reduce_from_model_parallel_region(input_: torch.Tensor, me: Device) -> torch
 
 def gather_from_model_parallel_region(input_: torch.Tensor, me: Device) -> torch.Tensor:
     if me.world.backend == "pytorch":
+        me.world.event_logger.log_event(
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_start",
+                "size": input_.element_size() * input_.nelement(),
+            }
+        )
+
         start = perf_counter()
         result = gfmpr(input_)
         end = perf_counter()
+
         me.world.event_logger.log_event(
-            {"time": start, "action": "scatter_to_model_parallel_region", "duration": end - start}
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_end",
+                "duration": end - start,
+            }
         )
+
         return result
 
     result = me.world.chan("all_gather").all_gather(me, input_, "gather_from_model_parallel_region")
