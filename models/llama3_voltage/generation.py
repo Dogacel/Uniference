@@ -63,7 +63,8 @@ class Llama3:
 
         if not torch.distributed.is_initialized():
             if device.type == "cuda":
-                torch.distributed.init_process_group("nccl")
+                backend = os.environ.get("DIST_BACKEND", "nccl")
+                torch.distributed.init_process_group(backend)
             elif device.type == "xpu" and is_xccl_available():
                 torch.distributed.init_process_group("xccl")
             else:
