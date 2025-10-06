@@ -59,10 +59,14 @@ class Device:
         self.world = world
         self.terminated = False
         self.state: "DeviceState"
+        self.initialized = False
 
     def initialize(self):
+        if self.initialized:
+            return
         print(f"Initializing device {self.name}")
         self.program.initialize(self)
+        self.initialized = True
 
     def run(self, warmup: bool = False):
         if warmup:

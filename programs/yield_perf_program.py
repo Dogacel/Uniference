@@ -36,6 +36,7 @@ class YieldPerfProgram(Program):
         self.disable_kv_cache: bool
         self.max_tokens: int
         self.yield_probability: float
+        self.initialized: bool = False
 
     def initialize(self, me: Device) -> None:
         def __initialize_model(
