@@ -24,5 +24,4 @@ uv run python -m scenarios.tensor_parallel_scenario \
   --prompt="${PROMPT_200}" \
   --max_seq_len=4096 \
   --max_tokens=25 \
-  --yield_probability=1.0 \
   --backend="pytorch"

@@ -35,6 +35,7 @@ class YieldPerfProgram(Program):
         disable_kv_cache: bool = False,
         max_tokens=256,
         yield_probability: float = 1.0,
+        **kwargs,
     ):
         super().__init__()
         self.model: Llama3

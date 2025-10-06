@@ -369,7 +369,7 @@ def _initialize_affine_weight(
         return None
 
     # Initialize master weight
-    master_weight = torch.empty(out_features, in_features, dtype=weight.dtype, requires_grad=False)
+    master_weight = torch.empty(out_features, in_features, dtype=weight.dtype, requires_grad=False).to(weight.device)
     init_method(master_weight)
 
     # Split and copy

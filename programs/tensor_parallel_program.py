@@ -34,6 +34,7 @@ class TensorParallelProgram(Program):
         quantization_mode: Optional[str] = None,
         disable_kv_cache: bool = False,
         max_tokens=256,
+        **kwargs,
     ):
         super().__init__()
         self.model: Llama3
