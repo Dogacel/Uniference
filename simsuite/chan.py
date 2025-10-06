@@ -84,9 +84,9 @@ class Chan:
             time = me.state.sync_clock()
 
         if isinstance(data, Tensor):
-            size = data.numel() * data.element_size()
+            size = data.numel() * data.element_size() * 8
         elif hasattr(data, "nbytes"):
-            size = data.nbytes
+            size = data.nbytes * 8
         else:
             size = 1
             print("Data size estimation not implemented for type " + str(type(data)))

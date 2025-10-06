@@ -63,7 +63,7 @@ class Network:
         # Transfer starts after RTT (latency)
         transmit = Transmit(data, size, world_time + self.latency, 0.0, id)
         self.transmits.append(transmit)
-        self.world.event_logger.log_event({"time": world_time, "action": "transmit_start", "id": id, "size": size})
+        self.world.event_logger.log_event({"time": world_time, "action": "transmit_start", "id": id, "size": size / 8})
 
         for device in self.world.devices:
             if device.state.dependency == id:

@@ -42,7 +42,7 @@ def run(
     world.network(
         NetworkArgs(
             devices=devices,
-            bandwidth=0.940 * Gbps,
+            bandwidth=0.942 * Gbps,
             latency=0.183 * ms,
         )
     )

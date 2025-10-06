@@ -171,3 +171,32 @@ iperf3 -s
 # On the other device
 iperf3 -c 192.168.1.14 -t 30
 ```
+
+### Injecting Latency and Limiting Bandwidth
+
+*WIP:* Toxiproxy doesn't work with GLOO backend because it only uses 25001 for randezvous.
+
+```shell
+wget https://github.com/Shopify/toxiproxy/releases/download/v2.7.0/toxiproxy-server-linux-arm64 -O toxiproxy-server
+wget https://github.com/Shopify/toxiproxy/releases/download/v2.7.0/toxiproxy-cli-linux-arm64 -O toxiproxy-cli
+chmod +x toxiproxy-server toxiproxy-cli
+
+# On a separate session
+./toxiproxy-server
+
+./toxiproxy-cli create -l 0.0.0.0:5000 -u 192.168.1.14:25001 mylink
+
+./toxiproxy-cli toxic add -t latency -a latency=10 -u mylink
+./toxiproxy-cli toxic add -t latency -a latency=10 -d mylink
+./toxiproxy-cli toxic add -t bandwidth -a rate=12500 -u mylink
+./toxiproxy-cli toxic add -t bandwidth -a rate=12500 -d mylink
+
+# On server
+iperf3 -s -p 25001
+
+# On client
+iperf3 -c localhost -p 5000 -t 30
+
+sudo apt install hping3
+sudo hping3 -S -p 5000 -c 5 127.0.0.1
+```
