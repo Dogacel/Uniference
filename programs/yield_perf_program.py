@@ -23,48 +23,34 @@ def get_device():
 
 
 class YieldPerfProgram(Program):
-    def __init__(self):
+    def __init__(
+        self,
+        ckpt_dir: str,
+        temperature: float = 0.6,
+        top_p: float = 0.9,
+        max_seq_len: int = 512,
+        max_batch_size: int = 4,
+        world_size: Optional[int] = None,
+        quantization_mode: Optional[str] = None,
+        disable_kv_cache: bool = False,
+        max_tokens=256,
+        yield_probability: float = 1.0,
+    ):
         super().__init__()
         self.model: Llama3
-        self.ckpt_dir: str
-        self.temperature: float
-        self.top_p: float
-        self.max_seq_len: int
-        self.max_batch_size: int
-        self.world_size: Optional[int]
-        self.quantization_mode: Optional[str]
-        self.disable_kv_cache: bool
-        self.max_tokens: int
-        self.yield_probability: float
+        self.ckpt_dir: str = ckpt_dir
+        self.temperature: float = temperature
+        self.top_p: float = top_p
+        self.max_seq_len: int = max_seq_len
+        self.max_batch_size: int = max_batch_size
+        self.world_size: Optional[int] = world_size
+        self.quantization_mode: Optional[str] = quantization_mode
+        self.disable_kv_cache: bool = disable_kv_cache
+        self.max_tokens: int = max_tokens
+        self.yield_probability: float = yield_probability
         self.initialized: bool = False
 
     def initialize(self, me: Device) -> None:
-        def __initialize_model(
-            ckpt_dir: str,
-            temperature: float = 0.6,
-            top_p: float = 0.9,
-            max_seq_len: int = 512,
-            max_batch_size: int = 4,
-            world_size: Optional[int] = None,
-            quantization_mode: Optional[str] = None,
-            disable_kv_cache: bool = False,
-            max_tokens=256,
-            yield_probability: float = 1.0,
-            **kwargs,
-        ) -> None:
-            self.ckpt_dir = ckpt_dir
-            self.temperature = temperature
-            self.top_p = top_p
-            self.max_seq_len = max_seq_len
-            self.max_batch_size = max_batch_size
-            self.world_size = world_size
-            self.quantization_mode = quantization_mode
-            self.disable_kv_cache = disable_kv_cache
-            self.max_tokens = max_tokens
-            self.yield_probability = yield_probability
-
-        fire.Fire(__initialize_model)
-
         self.me = me
         self.model = Llama3.build(
             ckpt_dir=self.ckpt_dir,

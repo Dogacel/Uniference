@@ -3,12 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, TYPE_CHECKING, Optional
 from torch import Tensor
-from . import dprint
+from simsuite.common import dprint
 
 if TYPE_CHECKING:
     from simsuite.world import World
     from simsuite.device import Device
-    from simsuite.network import Transmit
 
 
 @dataclass

@@ -24,7 +24,6 @@ def run(
             "max_seq_len": kwargs.get("max_seq_len", None),
             "max_tokens": kwargs.get("max_tokens", None),
             "performance_mode": world.performance_mode,
-            "yield_probability": kwargs.get("yield_probability", 1.0),
         }
     )
 
@@ -34,7 +33,7 @@ def run(
     for i in range(device_count):
         device = world.device(
             deviceArgs=DeviceArgs(spec=device_spec, client=True, name=f"phone_{i + 1}"),
-            program=TensorParallelProgram(),
+            program=TensorParallelProgram(**kwargs),
         )
         devices.append(device)
         world.chan("input").subscribe(device)

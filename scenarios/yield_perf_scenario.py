@@ -34,7 +34,7 @@ def run(
     for i in range(device_count):
         device = world.device(
             deviceArgs=DeviceArgs(spec=device_spec, client=True, name=f"phone_{i + 1}"),
-            program=YieldPerfProgram(),
+            program=YieldPerfProgram(**kwargs),
         )
         devices.append(device)
         world.chan("input").subscribe(device)

@@ -14,7 +14,7 @@ from simsuite.device import Device, DeviceArgs, DeviceState
 from simsuite.event_logger import WorldEventLogger
 from simsuite.network import Network, NetworkArgs
 from simsuite.profiler import TorchProfiler
-from . import dprint
+from simsuite.common import dprint
 
 
 class PreparedEvent:
@@ -279,7 +279,7 @@ class World:
                 self.event_logger.log_event({"device": device.name, "action": "finished", "time": state.clock})
                 device.terminated = True
 
-        if not debug_run:
+        if not warmup:
             self.event_logger.dump_events()
             self.event_logger.report_run(
                 time=self.max_time,

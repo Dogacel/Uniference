@@ -4,7 +4,7 @@ import sys
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Tuple, Any
-from . import dprint
+from simsuite.common import dprint
 
 if TYPE_CHECKING:
     from simsuite.device import Device
