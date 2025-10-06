@@ -1,3 +1,4 @@
+import itertools
 import sys
 
 from typing import Optional, Sequence
@@ -25,19 +26,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             program=lambda **kwargs: YieldPerfProgram(**kwargs),
         )
 
-        for _ in range(repeats):
-            for text_length in text_lengths:
-                for yield_probability in yield_probs:
-                    tokens_to_generate = text_length
-                    print(f"Tokens to generate: {tokens_to_generate}, Yield probability: {yield_probability}")
+        combinations = list(itertools.product(yield_probs, text_lengths, range(repeats)))
 
-                    sub_prompt = get_prompt_sequence_first_n(prompt, 10)
-                    run_once(
-                        prompt=sub_prompt,
-                        max_tokens=tokens_to_generate,
-                        yield_probability=yield_probability,
-                        world=world,
-                    )
+        for combo in combinations:
+            yield_probability, text_length, _ = combo
+            for yield_probability in yield_probs:
+                tokens_to_generate = text_length
+                print(f"Tokens to generate: {tokens_to_generate}, Yield probability: {yield_probability}")
+
+                sub_prompt = get_prompt_sequence_first_n(prompt, 10)
+                run_once(
+                    prompt=sub_prompt,
+                    max_tokens=tokens_to_generate,
+                    yield_probability=yield_probability,
+                    world=world,
+                )
         world.destroy()
 
     return 0

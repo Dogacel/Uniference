@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 
+from fairscale.nn.model_parallel.initialize import destroy_model_parallel
 import torch
 import gc
 
@@ -290,3 +291,6 @@ class World:
     def destroy(self):
         if self.device_type == "cuda":
             destroy_process_group()
+            destroy_model_parallel()
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
