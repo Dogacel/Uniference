@@ -76,12 +76,32 @@ class YieldPerfProgram(Program):
             yield_probability=self.yield_probability,
         )
 
+    def warmup(self) -> None:
+        me = self.me
+        model = self.model
+
+        print(f"Device {me.name} warming up...")
+        print(f"[{me.name}] Generating 20 tokens for warmup...")
+        result = ""
+
+        for token_results in model.chat_completion(
+            [[RawMessage(role="user", content="Count from 1 to 10.")]],
+            temperature=0.0,
+            top_p=1.0,
+            max_gen_len=20,
+        ):
+            if token_results[0].finished:
+                break
+            result += token_results[0].text
+
+        print(f"[{me.name}] Warmup complete. Generated text: {result}")
+
+        model.clean_cache()
+
     def run(self) -> None:
         world = self.me.world
         me = self.me
         model = self.model
-
-        world.chan("input").subscribe(me)
 
         # Non client machines will be listening for cache updates
         input: Optional[list[RawMessage]] = None

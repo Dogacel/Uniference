@@ -77,7 +77,6 @@ class TensorParallelProgram(Program):
         )
 
     def warmup(self) -> None:
-        world = self.me.world
         me = self.me
         model = self.model
 

@@ -1,6 +1,6 @@
 import os
 
-__DEBUG = bool(os.getenv("DEBUG", False))
+__DEBUG = str(os.getenv("DEBUG", "0")).lower() in ("1", "true", "yes", "on")
 
 
 def dprint(*args, **kwargs):

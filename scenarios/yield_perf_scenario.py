@@ -36,8 +36,8 @@ def run(
             deviceArgs=DeviceArgs(spec=device_spec, client=True, name=f"phone_{i + 1}"),
             program=YieldPerfProgram(),
         )
-        device.send("input", [RawMessage(role="user", content=prompt)], "input")
         devices.append(device)
+        world.chan("input").subscribe(device)
 
     world.network(
         NetworkArgs(
@@ -46,6 +46,11 @@ def run(
             latency=10 * ms,
         )
     )
+
+    world.run(warmup=True)
+
+    for device in world.devices:
+        device.send("input", [RawMessage(role="user", content=prompt)], "input")
 
     world.run()
 
