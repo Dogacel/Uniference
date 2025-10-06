@@ -287,5 +287,6 @@ class World:
                 params=self.runtime_params | {"yield_count": yield_count},
             )
 
+    def destroy(self):
         if self.device_type == "cuda":
             destroy_process_group()

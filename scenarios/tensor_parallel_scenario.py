@@ -55,6 +55,7 @@ def run(
         device.send("input", [RawMessage(role="user", content=prompt)], "starting_input", 0.0)
 
     world.run()
+    world.destroy()
 
 
 if __name__ == "__main__":
