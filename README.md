@@ -131,6 +131,9 @@ export RANK=0
 
 # Update world size if needed
 export WORLD_SIZE=2
+
+# Jetson Nano doesn't work with nccl
+export DIST_BACKEND=gloo
 ```
 
 Follower devices,
@@ -146,4 +149,7 @@ export RANK=1
 
 # Update world size if needed
 export WORLD_SIZE=2
+
+# Jetson Nano doesn't work with nccl
+export DIST_BACKEND=gloo
 ```

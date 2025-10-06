@@ -284,17 +284,15 @@ class VocabParallelEmbeddingSim(torch.nn.Module):
         output = reduce_from_model_parallel_region(output_parallel, self.me)
         return output
 
-overhead_sum = 0
 
 def scatter_to_model_parallel_region(input_: torch.Tensor, me: Device) -> torch.Tensor:
-    global overhead_sum
     if me.world.backend == "pytorch":
         start = perf_counter()
-        result =  stmpr(input_)
+        result = stmpr(input_)
         end = perf_counter()
-        overhead_sum += (end - start)
-        print(f"Time taken for scatter_to_model_parallel_region: {end - start}")
-        print("Total overhead so far:", overhead_sum)
+        me.world.event_logger.log_event(
+            {"time": start, "action": "scatter_to_model_parallel_region", "duration": end - start}
+        )
         return result
 
     world_size = len(me.world.devices)
@@ -305,14 +303,13 @@ def scatter_to_model_parallel_region(input_: torch.Tensor, me: Device) -> torch.
 
 
 def reduce_from_model_parallel_region(input_: torch.Tensor, me: Device) -> torch.Tensor:
-    global overhead_sum
     if me.world.backend == "pytorch":
         start = perf_counter()
         result = rfmpr(input_)
         end = perf_counter()
-        overhead_sum += (end - start)
-        print(f"Time taken for reduce_from_model_parallel_region: {end - start}")
-        print("Total overhead so far:", overhead_sum)
+        me.world.event_logger.log_event(
+            {"time": start, "action": "reduce_from_model_parallel_region", "duration": end - start}
+        )
         return result
 
     # TODO: A network efficient implementation is possible.
@@ -323,14 +320,13 @@ def reduce_from_model_parallel_region(input_: torch.Tensor, me: Device) -> torch
 
 
 def gather_from_model_parallel_region(input_: torch.Tensor, me: Device) -> torch.Tensor:
-    global overhead_sum
     if me.world.backend == "pytorch":
         start = perf_counter()
         result = gfmpr(input_)
         end = perf_counter()
-        overhead_sum += (end - start)
-        print(f"Time taken for gather_from_model_parallel_region: {end - start}")
-        print("Total overhead so far:", overhead_sum)
+        me.world.event_logger.log_event(
+            {"time": start, "action": "scatter_to_model_parallel_region", "duration": end - start}
+        )
         return result
 
     result = me.world.chan("all_gather").all_gather(me, input_, "gather_from_model_parallel_region")

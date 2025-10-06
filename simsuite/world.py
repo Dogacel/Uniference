@@ -184,6 +184,8 @@ class World:
         yield_count = 0
         deadlock_checks = 0
 
+        self.event_logger.log_event({"action": "simulation_start", "time": 0})
+
         # Event loop
         while self._runq:
             for event in self.events:
@@ -279,6 +281,8 @@ class World:
                 print(f"Device {device.name} is terminated after {state.clock} seconds")
                 self.event_logger.log_event({"device": device.name, "action": "finished", "time": state.clock})
                 device.terminated = True
+
+        self.event_logger.log_event({"action": "simulation_end", "time": self.max_time})
 
         if not warmup:
             self.event_logger.dump_events()
