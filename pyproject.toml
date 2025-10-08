@@ -64,6 +64,7 @@ analysis = [
     "seaborn",
     "statsmodels",
     "SALib",
+    "plotly",
 ]
 
 [tool.setuptools]

@@ -26,6 +26,7 @@ class Transmit:
     start_time: float
     transferred_so_far: float
     id: str
+    internal_id: int
     end_time: Optional[float] = None
 
     def completed(self) -> bool:
@@ -53,6 +54,7 @@ class Network:
         self.transmits = []
         self.full_duplex = args.full_duplex
         self.internal_clock = 0.0
+        self.internal_id_counter = 0
 
     def transmit(self, data: Any, size: float, world_time: float, id: str):
         """
@@ -61,15 +63,24 @@ class Network:
         """
 
         # Transfer starts after RTT (latency)
-        transmit = Transmit(data, size, world_time + self.latency, 0.0, id)
+        transmit = Transmit(data, size, world_time + self.latency, 0.0, id, self.internal_id_counter)
+        self.internal_id_counter += 1
         self.transmits.append(transmit)
-        self.world.event_logger.log_event({"time": world_time, "action": "transmit_start", "id": id, "size": size / 8})
+        self.world.event_logger.log_event(
+            {
+                "time": world_time,
+                "action": "transmit_start",
+                "id": id,
+                "internal_id": transmit.internal_id,
+                "size": size / 8,
+            }
+        )
 
         for device in self.world.devices:
             if device.state.dependency == id:
                 device.state.dependency = transmit
 
-    def complete_transmit(self, transmit: Transmit) -> Optional[Transmit]:
+    def complete_transmit(self, transmit: Transmit, device_time: float) -> Optional[Transmit]:
         """
         Complete a transmit, removing it from the
         list of in-flight transmits and returning it.
@@ -109,7 +120,7 @@ class Network:
             else:
                 # Half-duplex: divide bandwidth by number of in-flight transmits
                 on_going_transmits = [
-                    t for t in self.transmits if t.start_time < self.internal_clock and not t.completed()
+                    t for t in self.transmits if t.start_time <= self.internal_clock and not t.completed()
                 ]
                 return self.bandwidth / max(1, len(on_going_transmits))
 
@@ -128,7 +139,7 @@ class Network:
         dprint("==============================")
 
         # Find the next transmit to complete.
-        available_transmits = [t for t in self.transmits if not t.completed() and t.start_time <= self.internal_clock]
+        available_transmits = [t for t in self.transmits if not t.completed()]
         first_to_end = min(available_transmits, key=end_time, default=None)
         # Find the time when the next transmit will end assuming there will be no changes in bandwidth.
         first_end_time = end_time(first_to_end)
@@ -149,23 +160,25 @@ class Network:
         # If next transmit to start is before some transmit to end, we can only
         # move time forward until the next transmit starts.
         if first_end_time > first_start_time:
-            dprint(f"Moving time forward to next transmit start at {first_start_time}.")
+            dprint(f"Moving time forward to next transmit start at {first_start_time} or the max_time {max_time}.")
             time_delta = min(max_time, first_start_time) - self.internal_clock
             if time_delta < 0:
                 raise ValueError("Time delta is negative, something went wrong.")
 
             for transmit in self.transmits:
                 # If the transmit hasn't started yet, skip it.
-                if transmit.start_time > self.internal_clock or transmit.completed():
+                if transmit.start_time > self.internal_clock + time_delta or transmit.completed():
                     continue
                 transmit.transferred_so_far += time_delta * true_bandwidth()
+                if transmit.transferred_so_far > transmit.size + 1:
+                    breakpoint()
 
             self.internal_clock += time_delta
             return (self.internal_clock, None)
 
         # A transmit will end before the next transmit starts.
         else:
-            time_delta = min(first_end_time, max_time) - self.internal_clock
+            time_delta = min(max_time, first_end_time) - self.internal_clock
             dprint(f"Moving time forward to next transmit end at {first_end_time} or the max_time {max_time}.")
             dprint(f"  Time delta: {time_delta}")
             if time_delta < 0:
@@ -173,27 +186,31 @@ class Network:
 
             for transmit in self.transmits:
                 # If the transmit hasn't started yet, skip it.
-                if transmit.start_time > self.internal_clock:
+                if transmit.start_time > self.internal_clock + time_delta or transmit.completed():
                     continue
 
                 # Simulate events happened between [internal_clock, max_time]
                 transmit.transferred_so_far += time_delta * true_bandwidth()
+                if transmit.transferred_so_far > transmit.size + 1:
+                    breakpoint()
 
             self.internal_clock += time_delta
 
             transmit = None
-            if self.internal_clock == first_end_time and first_to_end is not None:
+            if self.internal_clock >= first_end_time and first_to_end is not None:
                 dprint(f"  Transmit {first_to_end.id} completed at time {self.internal_clock}.")
                 transmit = first_to_end
                 # Make sure the first to end is actually done, no rounding errors
                 first_to_end.transferred_so_far = first_to_end.size
                 first_to_end.end_time = self.internal_clock
+
                 self.world.event_logger.log_event(
                     {
-                        "time": self.internal_clock,
+                        "time": first_to_end.end_time,
                         "action": "transmit_end",
-                        "id": first_to_end.id,
-                        "duration": self.latency + first_to_end.end_time - first_to_end.start_time,
+                        "id": transmit.id,
+                        "internal_id": transmit.internal_id,
+                        "duration": self.latency - transmit.start_time + first_to_end.end_time,
                     }
                 )
 

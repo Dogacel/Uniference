@@ -109,7 +109,7 @@ class Chan:
         assert me.state.dependency is not None and not isinstance(me.state.dependency, str)
 
         result = me.state.dependency.data
-        network.complete_transmit(me.state.dependency)
+        network.complete_transmit(me.state.dependency, me.state.sync_clock())
         me.state.dependency = None
 
         return result

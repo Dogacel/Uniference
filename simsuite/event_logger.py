@@ -9,7 +9,7 @@ class WorldEventLogger:
         self.events = []
 
     def log_event(self, event: dict):
-        self.events.append(event)
+        self.events.append({"timestamp": _time()} | event)
 
     def dump_events(self):
         with open("profile_out/event_log.jsonl", "w") as f:

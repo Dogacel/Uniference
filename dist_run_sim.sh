@@ -26,6 +26,6 @@ uv run python -m scenarios.tensor_parallel_scenario \
   --device_count=2 \
   --prompt="${PROMPT_1000}" \
   --max_seq_len=4096 \
-  --max_tokens=25 \
+  --max_tokens=1 \
   --yield_probability=1.0 \
   --backend="simulation"
