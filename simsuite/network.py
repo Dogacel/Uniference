@@ -113,7 +113,7 @@ class Network:
             return (self.internal_clock, None)
 
         # Helper to compute true bandwidth based on full/half duplex setting.
-        def true_bandwidth() -> float:
+        def true_bandwidth(device: Device) -> float:
             if self.full_duplex:
                 # Full-duplex: always use full bandwidth
                 return self.bandwidth

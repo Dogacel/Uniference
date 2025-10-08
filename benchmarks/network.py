@@ -1,9 +1,10 @@
 import time
 import torch
 import torch.distributed as dist
+import fire
 
 
-def run(num_latency_tests=10, num_bw_tests=3):
+def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
     dist.init_process_group("gloo")
     rank = dist.get_rank()
     world_size = dist.get_world_size()
@@ -63,21 +64,30 @@ def run(num_latency_tests=10, num_bw_tests=3):
     for size_bytes in sizes_bytes:
         num_floats = max(1, size_bytes // 4)  # float32 is 4 bytes
         big = torch.ones(num_floats, dtype=torch.float32)
+        to_gather = [torch.zeros(num_floats, dtype=torch.float32) for _ in range(world_size)]
         bw_results = []
         time_results = []
         for _ in range(num_bw_tests):
             if rank == 0:
                 start = time.time()
-                dist.send(big, dst=1)
-                dist.recv(big, src=1)
+
+                if mode == "send_recv":
+                    dist.send(big, dst=1)
+                    dist.recv(big, src=1)
+                elif mode == "all_gather":
+                    dist.all_gather(to_gather, big)
+
                 end = time.time()
                 elapsed = end - start
                 mbps = (size_bytes * 2) / (1024 * 1024) / elapsed  # send + recv, MB/s
                 bw_results.append(mbps)
                 time_results.append(elapsed)
-            elif rank == 1:
-                dist.recv(big, src=0)
-                dist.send(big, dst=0)
+            else:
+                if mode == "send_recv":
+                    dist.recv(big, src=0)
+                    dist.send(big, dst=0)
+                elif mode == "all_gather":
+                    dist.all_gather(to_gather, big)
             dist.barrier()
 
         if rank == 0:
@@ -100,5 +110,5 @@ def run(num_latency_tests=10, num_bw_tests=3):
 
 
 if __name__ == "__main__":
-    run()
+    fire.Fire(run)
     dist.destroy_process_group()
