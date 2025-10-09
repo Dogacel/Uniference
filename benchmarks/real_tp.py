@@ -21,9 +21,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     output_file = "results/" + parsed_args.output_file
     prompt = load_prompt("checkpoints/prompt_5000.txt")
 
-    text_lengths = [32, 256, 1024]
-    max_tokens = [1, 10, 100]
-    repeats = 1
+    text_lengths = [32, 128, 512]
+    max_tokens = [1, 4, 8, 16, 32, 64]
+    repeats = 10
 
     world = setup_world(
         device_count=device_count,
