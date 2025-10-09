@@ -285,11 +285,17 @@ class World:
         self.event_logger.log_event({"action": "simulation_end", "time": self.max_time})
 
         if not warmup:
-            self.event_logger.dump_events()
+            log_file_name = self.event_logger.dump_events()
+            transmit_stats = self.event_logger.transmit_stats()
             self.event_logger.report_run(
                 time=self.max_time,
                 output_file=self.output_file,
-                params=self.runtime_params | {"yield_count": yield_count},
+                params=self.runtime_params
+                | transmit_stats
+                | {
+                    "yield_count": yield_count,
+                    "log_file": log_file_name,
+                },
             )
 
     def destroy(self):

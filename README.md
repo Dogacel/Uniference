@@ -199,4 +199,6 @@ iperf3 -c localhost -p 5000 -t 30
 
 sudo apt install hping3
 sudo hping3 -S -p 5000 -c 5 127.0.0.1
+
+sudo ip link set dev enP8p1s0 mtu 9000
 ```

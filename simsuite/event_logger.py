@@ -11,11 +11,34 @@ class WorldEventLogger:
     def log_event(self, event: dict):
         self.events.append({"timestamp": _time()} | event)
 
-    def dump_events(self):
-        with open("profile_out/event_log.jsonl", "w") as f:
+    def transmit_stats(self) -> dict:
+        total_duration = 0.0
+        total_size = 0
+        transmit_count = 0
+
+        for record in self.events:
+            if record.get("action") == "transmit_end" and "duration" in record:
+                total_duration += record["duration"]
+                transmit_count += 1
+
+            if record.get("action") == "transmit_start" and "size" in record:
+                total_size += record["size"]
+
+        return {
+            "total_transmit_duration": total_duration,
+            "total_transmit_size": total_size,
+            "transmit_count": transmit_count,
+        }
+
+    def dump_events(self) -> str:
+        now = _time()
+        fname = f"profile_out/event_log_{now}.jsonl"
+        with open(fname, "w") as f:
             for event in self.events:
                 json.dump(event, f)
                 f.write("\n")
+
+        return fname
 
     def report_run(
         self,
