@@ -81,7 +81,7 @@ class World:
         self.debug_run = kwargs.get("debug_run", False)
         self.output_file = kwargs.get("output_file", "results/run_report.json")
         self.device_type = get_device()
-        self.backend = kwargs.get("backend", "simulation")
+        self.backend = kwargs.get("backend", os.getenv("WORLD_BACKEND", "simulation"))
 
         print("Using backend:", self.backend)
 
