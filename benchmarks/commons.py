@@ -31,7 +31,7 @@ def get_prompt_sequence_first_n(prompt: str, n: int) -> str:
 def setup_world(device_count: int, seq_len: int, output_file: str, program: Callable[..., Program]) -> World:
     world = World(debug_run=False, output_file=output_file)
 
-    device_spec = DeviceSpec(flops=24 * TFLOPs, mem=8 * GB, max_bandwidth=5 * Gbps, inherent_latency=10 * ms)
+    device_spec = DeviceSpec()
 
     devices = []
     for i in range(device_count):
@@ -49,12 +49,10 @@ def setup_world(device_count: int, seq_len: int, output_file: str, program: Call
         world.chan("input").subscribe(device)
         world.chan("all_gather").subscribe(device)
 
-
     world.network(
         NetworkArgs(
             devices=devices,
-            bandwidth=5 * Gbps,
-            latency=10 * ms,
+            network_params=[5.50000006e-04, 8.33730502e-09, 1.30408584e-08, 6.55360000e04],
         )
     )
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import numpy as np
-import sys
 
 from dataclasses import dataclass
 from simsuite.common import dprint
@@ -15,8 +14,7 @@ if TYPE_CHECKING:
 @dataclass
 class NetworkArgs:
     devices: list[Device]
-    bandwidth: float
-    latency: float
+    network_params: list[float] 
     full_duplex: bool = True
 
 
@@ -51,15 +49,11 @@ class Network:
 
     def __init__(self, args: NetworkArgs):
         self.devices = args.devices
-        self.bandwidth = args.bandwidth
-        self.latency = args.latency
         self.transmits = []
         self.full_duplex = args.full_duplex
         self.internal_clock = 0.0
         self.internal_id_counter = 0
-
-        # TODO: Parameters should be adjustable based on empirical measurements
-        self.network_params = [1.30327685e-03, 1.53213318e-08, 1.78712584e-08, 8.33898864e06]
+        self.network_params = args.network_params
 
     def transmit(self, data: Any, size: float, world_time: float, id: str):
         """
@@ -67,8 +61,7 @@ class Network:
         in-flight transmits, and then schedule the new transmit.
         """
 
-        # Transfer starts after RTT (latency)
-        transmit = Transmit(data, size, world_time + self.latency, 0.0, id, self.internal_id_counter)
+        transmit = Transmit(data, size, world_time, 0.0, id, self.internal_id_counter)
         self.internal_id_counter += 1
         self.transmits.append(transmit)
         self.world.event_logger.log_event(
@@ -127,28 +120,11 @@ class Network:
 
             return transferred * 8
 
-            # if self.full_duplex:
-            #     # Full-duplex: always use full bandwidth
-            #     return self.bandwidth
-            # else:
-            #     # Half-duplex: divide bandwidth by number of in-flight transmits
-            #     on_going_transmits = [
-            #         t for t in self.transmits if t.start_time <= self.internal_clock and not t.completed()
-            #     ]
-            #     return self.bandwidth / max(1, len(on_going_transmits))
-
         # Helper to compute when a transmit will complete.
         # This assumes there will be no changes in bandwidth until the transmit completes.
         def end_time(transmit: Optional[Transmit]) -> float:
             if not transmit:
                 return float("inf")
-
-            # The traditional model based on latency and bandwidth only.
-            # rem_bytes = transmit.size - transmit.transferred_so_far
-            # rem_time = max(sys.float_info.epsilon, rem_bytes / true_bandwidth())
-            # return self.internal_clock + rem_time
-
-            # The more complex model based on empirical measurements.
 
             duration_for_transmit = duration_for(
                 transmit.internal_clock,
@@ -240,7 +216,7 @@ class Network:
                         "action": "transmit_end",
                         "id": transmit.id,
                         "internal_id": transmit.internal_id,
-                        "duration": self.latency - transmit.start_time + first_to_end.end_time,
+                        "duration": first_to_end.end_time - first_to_end.start_time,
                     }
                 )
 
@@ -262,6 +238,7 @@ def x_of_t(t, alpha, beta1, beta2, S0):
     if t <= tknee:
         return (t - alpha) / beta1
     return S0 + (t - alpha - beta1 * S0) / beta2
+
 
 def end_time(t0, S, alpha, beta1, beta2, S0):
     """

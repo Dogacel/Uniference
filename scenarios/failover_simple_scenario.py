@@ -12,7 +12,7 @@ from simsuite.world import World
 
 world = World()
 
-phone_spec = DeviceSpec(flops=24 * TFLOPs, mem=8 * GB, max_bandwidth=5 * Gbps, inherent_latency=10 * ms)
+phone_spec = DeviceSpec()
 
 phone = world.device(
     deviceArgs=DeviceArgs(spec=phone_spec, client=True, name="user-phone"),
@@ -27,8 +27,7 @@ spare_phone = world.device(
 local_wifi = world.network(
     NetworkArgs(
         devices=[phone, spare_phone],
-        bandwidth=4.8 * Gbps,
-        latency=5 * ms,  # Maybe standard deviation?
+        network_params=[5.50000006e-04, 8.33730502e-09, 1.30408584e-08, 6.55360000e04],
     )
 )
 

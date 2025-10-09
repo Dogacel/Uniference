@@ -88,7 +88,7 @@ class World:
     def device(self, deviceArgs: DeviceArgs, program: Program):
         device = Device(deviceArgs, program, self)
         self.devices.append(device)
-        self.device_states[device] = DeviceState()
+        self.device_states[device] = DeviceState(device)
         device.state = self.device_states[device]
 
         self.event_logger.log_event({"device": device.name, "action": "created"})

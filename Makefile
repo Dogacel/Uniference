@@ -10,7 +10,7 @@ PROMPT_5000 := $(shell cat ./checkpoints/prompt_5000.txt)
 
 RUN_ID=$(shell date +%s)
 
-profile: clear_prof
+profile:
 	DEVICE=cpu ./run.sh scenarios.concurrent_scenario \
 		--device_count=2 \
 		--prompt="${PROMPT_500}" \
@@ -21,7 +21,7 @@ profile: clear_prof
 
 	uv run simsuite/trace_merger.py results/${RUN_ID}_yield_perf.json profile_out --normalize-logical-clock
 
-sanity: clear_prof
+sanity:
 	DEVICE=cpu ./run.sh scenarios.yield_perf_scenario \
 		--device_count=1 \
 		--prompt="${PROMPT_100}" \
@@ -29,7 +29,7 @@ sanity: clear_prof
 		--max_tokens=10 \
 		--yield_probability=1.0
 
-sanity_cuda: clear_prof
+sanity_cuda:
 	DEVICE=cuda ./run.sh scenarios.yield_perf_scenario \
 		--device_count=1 \
 		--prompt="${PROMPT_100}" \
@@ -37,7 +37,7 @@ sanity_cuda: clear_prof
 		--max_tokens=10 \
 		--yield_probability=1.0
 
-sanity_voltage: clear_prof
+sanity_voltage:
 	DEVICE=cpu ./run.sh scenarios.voltage_scenario \
 		--device_count=1 \
 		--prompt="${PROMPT_100}" \
@@ -54,7 +54,7 @@ sanity_voltage_2: clear_prof
 		--program=voltage
 
 
-sanity_voltage_4: clear_prof
+sanity_voltage_4:
 	DEVICE=mps ./run.sh scenarios.voltage_scenario \
 		--device_count=4 \
 		--prompt="${PROMPT_1000}" \

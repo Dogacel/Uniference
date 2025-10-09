@@ -1,7 +1,29 @@
+import json
+import numpy as np
 import time
 import torch
 import torch.distributed as dist
 import fire
+
+from scipy.optimize import curve_fit
+from simsuite.network import model_broken
+
+
+def train_model(rtt: float, bandwidth: float, knee: float, bytes: list, means: list):
+    beta_init = 1.0 / bandwidth
+    p0 = [rtt, beta_init, beta_init, knee]
+    bounds = ([0.0, 0.0, 0.0, 1.0], [0.1, 1e-6, 1e-6, 64 * 1024 * 1024])
+
+    x = bytes
+    y = means
+    params, _ = curve_fit(model_broken, x, y, p0=p0, bounds=bounds, maxfev=20000)
+
+    (alpha, _, beta2, _) = params
+
+    print("=== Fitted Network Model Parameters ===")
+    print(f"Latency (alpha): {alpha:.6f} s")
+    print(f"Bandwidth (large) ~ {1 / beta2 / 1e6:.2f} MB/s")
+    print(f"params: {json.dumps(params)}")
 
 
 def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
@@ -10,7 +32,7 @@ def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
     world_size = dist.get_world_size()
 
     # ---- Ping (latency) test ----
-    latencies = []
+    latencies: list[float] = []
     tensor = torch.zeros(1)
     for _ in range(num_latency_tests):
         if rank == 0:
@@ -61,6 +83,8 @@ def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
         33554432,
         104857600,
     ]  # 1B, 2B, 4B, 8B, ..., 100MB
+    bandwidth_means = []
+    sizes_means = []
     for size_bytes in sizes_bytes:
         num_floats = max(1, size_bytes // 4)  # float32 is 4 bytes
         big = torch.ones(num_floats, dtype=torch.float32)
@@ -95,6 +119,10 @@ def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
             std_bw = (sum((x - mean_bw) ** 2 for x in bw_results) / len(bw_results)) ** 0.5
             mean_time = sum(time_results) / len(time_results)
             std_time = (sum((x - mean_time) ** 2 for x in time_results) / len(time_results)) ** 0.5
+
+            bandwidth_means.append(mean_bw)
+            sizes_means.append(mean_time)
+
             if size_bytes < 1024:
                 size_str = f"{size_bytes}B"
             elif size_bytes < 1024 * 1024:
@@ -107,6 +135,14 @@ def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
             print(
                 f"[rank0] Size={size_str} | Transfer time (s): min={min(time_results):.4f}, max={max(time_results):.4f}, mean={mean_time:.4f}, std={std_time:.4f}"
             )
+
+    train_model(
+        rtt=np.array(latencies).mean(),
+        bandwidth=np.array(bandwidth_means).mean(),
+        knee=64 * 1024,
+        bytes=sizes_bytes,
+        means=sizes_means,
+    )
 
 
 if __name__ == "__main__":

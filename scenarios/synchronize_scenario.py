@@ -18,7 +18,7 @@ def run(
 ):
     world = World()
 
-    device_spec = DeviceSpec(flops=24 * TFLOPs, mem=8 * GB, max_bandwidth=5 * Gbps, inherent_latency=10 * ms)
+    device_spec = DeviceSpec()
     devices = []
 
     for i in range(device_count):
@@ -26,14 +26,13 @@ def run(
             deviceArgs=DeviceArgs(spec=device_spec, client=True, name=f"phone_{i + 1}"),
             program=PingPongProgram(),
         )
-        device.send("input", [RawMessage(role="user", content=prompt)])
+        device.send("input", [RawMessage(role="user", content=prompt)], "input", force_time=0.0)
         devices.append(device)
 
     world.network(
         NetworkArgs(
             devices=devices,
-            bandwidth=5 * Gbps,
-            latency=100 * ms,
+            network_params=[5.50000006e-04, 8.33730502e-09, 1.30408584e-08, 6.55360000e04],
         )
     )
 

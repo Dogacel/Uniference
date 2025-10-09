@@ -127,6 +127,9 @@ export MASTER_ADDR=192.168.1.14
 export MASTER_PORT=25001
 export GLOO_SOCKET_IFNAME=enP8p1s0
 
+# Set simulation backend to pytorch
+export WORLD_BACKEND=pytorch
+
 export RANK=0
 
 # Update world size if needed
@@ -144,6 +147,9 @@ export MASTER_ADDR=192.168.1.14
 export MASTER_PORT=25001
 export GLOO_SOCKET_IFNAME=enP8p1s0
 
+# Set simulation backend to pytorch
+export WORLD_BACKEND=pytorch
+
 # Update rank for each device
 export RANK=1
 
@@ -156,20 +162,10 @@ export DIST_BACKEND=gloo
 
 ## Network Simulation
 
-Use `ping` to get information about RTT.
+Run the following command in both networks to learn about the network parameters.
 
 ```shell
-ping 192.168.1.14 -c 100
-```
-
-Use `iperf3` to get information about bandwidth.
-
-```shell
-# On rank=0 device
-iperf3 -s
-
-# On the other device
-iperf3 -c 192.168.1.14 -t 30
+uv run benchmarks/network.py --mode=all_gather
 ```
 
 ### Injecting Latency and Limiting Bandwidth
@@ -199,6 +195,4 @@ iperf3 -c localhost -p 5000 -t 30
 
 sudo apt install hping3
 sudo hping3 -S -p 5000 -c 5 127.0.0.1
-
-sudo ip link set dev enP8p1s0 mtu 9000
 ```

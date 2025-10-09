@@ -21,7 +21,7 @@ def run(
         }
     )
 
-    device_spec = DeviceSpec(flops=24 * TFLOPs, mem=8 * GB, max_bandwidth=5 * Gbps, inherent_latency=10 * ms)
+    device_spec = DeviceSpec()
     devices = []
 
     for i in range(device_count):
@@ -34,8 +34,7 @@ def run(
     world.network(
         NetworkArgs(
             devices=devices,
-            bandwidth=5 * Gbps,
-            latency=10 * ms,
+            network_params=[5.50000006e-04, 8.33730502e-09, 1.30408584e-08, 6.55360000e04],
         )
     )
 

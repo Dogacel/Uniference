@@ -11,10 +11,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class DeviceSpec:
-    flops: float
-    mem: float
-    max_bandwidth: float
-    inherent_latency: float
+    speed_scale: float = 1.0
 
 
 @dataclass
@@ -26,6 +23,7 @@ class DeviceArgs:
 
 @dataclass
 class DeviceState:
+    device: "Device"
     dependency: Optional[Transmit | str] = None
 
     """
@@ -45,7 +43,7 @@ class DeviceState:
 
     def sync_clock(self) -> float:
         now = perf_counter()
-        self.clock += now - self.last_run_time
+        self.clock += (now - self.last_run_time) * self.device.spec.speed_scale
         self.last_run_time = now
         return self.clock
 
