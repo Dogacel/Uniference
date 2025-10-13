@@ -4,6 +4,7 @@ import time
 import torch
 import torch.distributed as dist
 import fire
+import os
 
 from scipy.optimize import curve_fit
 from simsuite.network import model_broken
@@ -12,7 +13,10 @@ from simsuite.network import model_broken
 def train_model(rtt: float, bandwidth: float, knee: float, bytes: list, means: list):
     beta_init = 1.0 / bandwidth
     p0 = [rtt, beta_init, beta_init, knee]
-    bounds = ([0.0, 0.0, 0.0, 1.0], [0.1, 1e-6, 1e-6, 64 * 1024 * 1024])
+    bounds = (
+        [rtt * 0.5, beta_init * 0.5, beta_init * 0.5, knee * 0.5],
+        [rtt * 2, beta_init * 2, beta_init * 2, knee * 2],
+    )
 
     x = bytes
     y = means
@@ -23,11 +27,13 @@ def train_model(rtt: float, bandwidth: float, knee: float, bytes: list, means: l
     print("=== Fitted Network Model Parameters ===")
     print(f"Latency (alpha): {alpha:.6f} s")
     print(f"Bandwidth (large) ~ {1 / beta2 / 1e6:.2f} MB/s")
+
+    params = params.tolist()
     print(f"params: {json.dumps(params)}")
 
 
 def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
-    dist.init_process_group("gloo")
+    dist.init_process_group(os.getenv("DIST_BACKEND", "gloo"))
     rank = dist.get_rank()
     world_size = dist.get_world_size()
 

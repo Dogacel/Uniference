@@ -21,7 +21,7 @@ A pre-determined set of scenarios and programs are listed under `scenarios` fold
 
 ```shell
 
-uv sync --extra torch
+uv sync --extra torch --extra analysis
 ./run.sh models.llama3.scripts.failover_simple_scenario
 
 ```
@@ -75,6 +75,15 @@ Currently only way to run a simulation is to run it on your local device. You ca
 Use the following commands to setup the benchmark.
 
 ```shell
+sudo hostname orin-X
+
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo vim /etc/sysctl.conf
+#net.ipv4.ip_forward=1
+#net.ipv6.conf.all.forwarding=1
+sudo sysctl -p
+sudo tailscale up --advertise-routes=192.168.1.0/24 --advertise-exit-node
+
 git config --global credential.helper store
 git clone https://github.com/Dogacel/edge-llm-benchmark.git
 # Use generated read-only API token
