@@ -89,10 +89,19 @@ def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
         2097152,
         4194304,
         8388608,
+        12589824,
         16777216,
+        24576512,
         33554432,
+        41943040,
+        50331648,
+        67108864,
+        83886080,
         104857600,
-    ]  # 1B, 2B, 4B, 8B, ..., 100MB
+        125829120,
+        167772160,
+        201326592,
+    ]  # 1B, 2B, 4B, 8B, ..., 200MB
     bandwidth_means = []
     sizes_means = []
     for size_bytes in sizes_bytes:
