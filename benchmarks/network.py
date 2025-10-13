@@ -11,6 +11,10 @@ from simsuite.network import model_broken
 
 
 def train_model(rtt: float, bandwidth: float, knee: float, bytes: list, means: list):
+    bandwidth = bandwidth * 1024 * 1024  # Convert MB/s to B/s
+    print("Initial parameters:")
+    print(f"RTT: {rtt}, Bandwidth: {bandwidth}, Knee: {knee}")
+
     beta_init = 1.0 / bandwidth
     p0 = [rtt, beta_init, beta_init, knee]
     bounds = (
