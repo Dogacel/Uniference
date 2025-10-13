@@ -132,7 +132,6 @@ def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
                 elif mode == "all_gather":
                     dist.all_gather(to_gather, big)
             dist.barrier()
-            print("Sleeping for 0.1s to avoid overloading the network...")
             time.sleep(0.1)
 
         if rank == 0:
@@ -156,8 +155,7 @@ def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
             print(
                 f"[rank0] Size={size_str} | Transfer time (s): min={min(time_results):.4f}, max={max(time_results):.4f}, mean={mean_time:.4f}, std={std_time:.4f}"
             )
-        
-        print(f"Sleeping for 1s to avoid overloading the network...")
+
         time.sleep(1.0)
 
     train_model(
