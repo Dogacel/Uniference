@@ -36,7 +36,7 @@ def train_model(rtt: float, bandwidth: float, knee: float, bytes: list, means: l
     print(f"params: {json.dumps(params)}")
 
 
-def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
+def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv", output_file="network_results.json"):
     dist.init_process_group(os.getenv("DIST_BACKEND", "gloo"))
     rank = dist.get_rank()
     world_size = dist.get_world_size()
@@ -102,6 +102,7 @@ def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
         167772160,
         201326592,
     ]  # 1B, 2B, 4B, 8B, ..., 200MB
+    samples = []
     bandwidth_means = []
     sizes_means = []
     for size_bytes in sizes_bytes:
@@ -122,7 +123,8 @@ def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
 
                 end = time.time()
                 elapsed = end - start
-                mbps = (size_bytes * 2) / (1024 * 1024) / elapsed  # send + recv, MB/s
+                mbps = size_bytes / elapsed  # send + recv, MB/s
+                samples.append({"size_bytes": size_bytes, "time_s": elapsed})
                 bw_results.append(mbps)
                 time_results.append(elapsed)
             else:
@@ -156,15 +158,19 @@ def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv"):
                 f"[rank0] Size={size_str} | Transfer time (s): min={min(time_results):.4f}, max={max(time_results):.4f}, mean={mean_time:.4f}, std={std_time:.4f}"
             )
 
-        time.sleep(1.0)
+    if rank == 0:
+        print(f"Saving raw results to {output_file}...")
+        with open(output_file, "w") as f:
+            json.dump(samples, f)
 
-    train_model(
-        rtt=np.array(latencies).mean(),
-        bandwidth=np.array(bandwidth_means).mean(),
-        knee=64 * 1024,
-        bytes=sizes_bytes,
-        means=sizes_means,
-    )
+        print("Fitting network model...")
+        train_model(
+            rtt=np.array(latencies).mean(),
+            bandwidth=np.array(bandwidth_means).mean(),
+            knee=64 * 1024,
+            bytes=sizes_bytes,
+            means=sizes_means,
+        )
 
 
 if __name__ == "__main__":

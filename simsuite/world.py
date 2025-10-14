@@ -67,7 +67,7 @@ class World:
     debug_run: bool
     output_file: str
 
-    backend: Literal["simulation", "pytorch"]
+    backend: Literal["simulation", "pytorch", "remote"]
 
     def __init__(self, **kwargs) -> None:
         self.devices = []
@@ -81,9 +81,27 @@ class World:
         self.debug_run = kwargs.get("debug_run", False)
         self.output_file = kwargs.get("output_file", "results/run_report.json")
         self.device_type = get_device()
+
         self.backend = kwargs.get("backend", os.getenv("WORLD_BACKEND", "simulation"))
 
         print("Using backend:", self.backend)
+
+        if self.backend == "remote":
+            mode = kwargs.get("remote_mode", os.getenv("REMOTE_MODE", "server"))
+            if mode not in ["server", "client"]:
+                raise ValueError("REMOTE_MODE must be 'server' or 'client'")
+            self.remote_mode = mode
+            self.remote_host = kwargs.get("remote_host", os.getenv("REMOTE_HOST", "0.0.0.0"))
+            self.remote_port = int(kwargs.get("remote_port", os.getenv("REMOTE_PORT", "25002")))
+
+            print(f"Remote mode: {self.remote_mode}, host: {self.remote_host}, port: {self.remote_port}")
+
+            if self.remote_mode == "server":
+                from simsuite.server import StatefulServer
+                self.server = StatefulServer(host=self.remote_host, port=self.remote_port)
+            else:
+                from simsuite.client import StatefulClient
+                self.client = StatefulClient(server_host=self.remote_host, server_port=self.remote_port)
 
     def device(self, deviceArgs: DeviceArgs, program: Program):
         device = Device(deviceArgs, program, self)
