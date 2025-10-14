@@ -1,40 +1,9 @@
 import json
-import numpy as np
 import time
 import torch
 import torch.distributed as dist
 import fire
 import os
-
-from scipy.optimize import curve_fit
-from simsuite.network import model_broken
-
-
-def train_model(rtt: float, bandwidth: float, knee: float, bytes: list, means: list):
-    bandwidth = bandwidth * 1024 * 1024  # Convert MB/s to B/s
-    print("Initial parameters:")
-    print(f"RTT: {rtt}, Bandwidth: {bandwidth}, Knee: {knee}")
-
-    beta_init = 1.0 / bandwidth
-    p0 = [rtt, beta_init, beta_init, knee]
-    bounds = (
-        [rtt * 0.5, beta_init * 0.5, beta_init * 0.5, knee * 0.5],
-        [rtt * 2, beta_init * 2, beta_init * 2, knee * 2],
-    )
-
-    x = bytes
-    y = means
-    params, _ = curve_fit(model_broken, x, y, p0=p0, bounds=bounds, maxfev=20000)
-
-    (alpha, _, beta2, _) = params
-
-    print("=== Fitted Network Model Parameters ===")
-    print(f"Latency (alpha): {alpha:.6f} s")
-    print(f"Bandwidth (large) ~ {1 / beta2 / 1e6:.2f} MB/s")
-
-    params = params.tolist()
-    print(f"params: {json.dumps(params)}")
-
 
 def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="network_results.json"):
     dist.init_process_group(os.getenv("DIST_BACKEND", "gloo"))
@@ -46,10 +15,10 @@ def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="ne
     tensor = torch.zeros(1)
     for _ in range(num_latency_tests):
         if rank == 0:
-            start = time.time()
+            start = time.perf_counter()
             dist.send(tensor, dst=1)
             dist.recv(tensor, src=1)
-            end = time.time()
+            end = time.perf_counter()
             latencies.append((end - start) * 1000)
         elif rank == 1:
             dist.recv(tensor, src=0)
@@ -114,7 +83,7 @@ def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="ne
         time_results = []
         for _ in range(num_bw_tests):
             if rank == 0:
-                start = time.time()
+                start = time.perf_counter()
 
                 if mode == "send_recv":
                     dist.send(big, dst=1)
@@ -122,7 +91,7 @@ def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="ne
                 elif mode == "all_gather":
                     dist.all_gather(to_gather, big)
 
-                end = time.time()
+                end = time.perf_counter()
                 elapsed = end - start
                 mbps = size_bytes / elapsed  # send + recv, MB/s
                 samples.append({"size_bytes": size_bytes, "time_s": elapsed})
@@ -164,14 +133,6 @@ def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="ne
         with open(output_file, "w") as f:
             json.dump(samples, f)
 
-        print("Fitting network model...")
-        train_model(
-            rtt=np.array(latencies).mean(),
-            bandwidth=np.array(bandwidth_means).mean(),
-            knee=64 * 1024,
-            bytes=sizes_bytes,
-            means=sizes_means,
-        )
 
 
 if __name__ == "__main__":
