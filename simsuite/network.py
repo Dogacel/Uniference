@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 @dataclass
 class NetworkArgs:
     devices: list[Device]
-    network_params: list[float] 
+    network_params: list[float]
     full_duplex: bool = True
 
 
@@ -38,7 +38,7 @@ class Transmit:
     def __repr__(self) -> str:
         return (
             f"Transmit(id={self.id!r}, size={self.size}, start_time={self.start_time}, "
-            f"transferred_so_far={self.transferred_so_far})"
+            f"transferred_so_far={self.transferred_so_far}), end_time={self.end_time}"
         )
 
 
@@ -110,11 +110,15 @@ class Network:
             dprint(f"Network already at or beyond max_time {max_time} with internal clock {self.internal_clock}.")
             return (self.internal_clock, None)
 
+        def active_transmits() -> int:
+            return len([t for t in self.transmits if not t.completed() and t.start_time <= self.internal_clock])
+
         # Helper to compute true bandwidth based on full/half duplex setting.
         def true_bandwidth(transmit: Transmit, delta_time: float) -> float:
             transferred = bytes_transferred_in_window(
                 transmit.internal_clock,
                 delta_time,
+                active_transmits(),
                 *self.network_params,
             )
 
@@ -129,10 +133,11 @@ class Network:
             duration_for_transmit = duration_for(
                 transmit.internal_clock,
                 (transmit.size - transmit.transferred_so_far) / 8,
+                active_transmits(),
                 *self.network_params,
             )
 
-            if duration_for_transmit > 10:
+            if duration_for_transmit < 0:
                 breakpoint()
 
             return self.internal_clock + duration_for_transmit
@@ -175,8 +180,9 @@ class Network:
                     continue
                 transmit.transferred_so_far += true_bandwidth(transmit, time_delta)
                 transmit.internal_clock += time_delta
+
                 if transmit.transferred_so_far > transmit.size + 1:
-                    breakpoint()
+                    raise ValueError("Transmit transferred more than its size, something went wrong.")
 
             self.internal_clock += time_delta
             return (self.internal_clock, None)
@@ -197,6 +203,7 @@ class Network:
                 # Simulate events happened between [internal_clock, max_time]
                 transmit.transferred_so_far += true_bandwidth(transmit, time_delta)
                 transmit.internal_clock += time_delta
+    
                 if transmit.transferred_so_far > transmit.size + 1:
                     breakpoint()
 
@@ -223,57 +230,29 @@ class Network:
             return (self.internal_clock, transmit)
 
 
-def model_broken(x, alpha, beta1, beta2, S0):
-    x1 = np.minimum(x, S0)
-    x2 = np.maximum(0.0, x - S0)
-    return alpha + beta1 * x1 + beta2 * x2
-
-
-def x_of_t(t, alpha, beta1, beta2, S0):
-    """Cumulative bytes transferred by time t."""
-    t = float(t)
-    tknee = alpha + beta1 * S0
-    if t <= alpha:
-        return 0.0
-    if t <= tknee:
-        return (t - alpha) / beta1
-    return S0 + (t - alpha - beta1 * S0) / beta2
-
-
-def end_time(t0, S, alpha, beta1, beta2, S0):
+def duration_for(t0, S, active_transmits, alpha, beta):
     """
-    When will S *additional* bytes be sent, starting at wall-clock time t0?
-    Model: t(x) = alpha + beta1*min(x,S0) + beta2*max(0,x-S0).
+    How long (seconds) from t0 to finish S additional bytes.
+
+    alpha: latency (seconds)
+    beta: 1/bandwidth (seconds/byte)
     """
+
     if S <= 0:
-        return float(t0)  # nothing to send
+        return 0
 
-    # If we haven't reached alpha yet, transfer hasn't started.
-    if t0 < alpha:
-        t = alpha
-        x0 = 0.0
-    else:
-        t = float(t0)
-        x0 = x_of_t(t0, alpha, beta1, beta2, S0)
-
-    # How many bytes remain in the fast (pre-knee) segment?
-    rem1 = max(0.0, S0 - x0)
-    send1 = min(S, rem1)  # bytes we can still send at beta1
-    send2 = S - send1  # rest goes at beta2
-
-    # Time to send remaining bytes
-    t += send1 * beta1 + send2 * beta2
-    return t
+    # If time has already passed latency, we can use full bandwidth.
+    return max(0, alpha - t0) + S * beta / max(active_transmits, 1)
 
 
-def duration_for(t0, S, alpha, beta1, beta2, S0):
-    """How long (seconds) from t0 to finish S additional bytes."""
-    return end_time(t0, S, alpha, beta1, beta2, S0) - t0
-
-
-def bytes_transferred_in_window(t0, dt, alpha, beta1, beta2, S0):
+def bytes_transferred_in_window(t0, dt, active_transmits, alpha, beta):
     """
     Bytes transferred between times [t0, t0+dt].
+
+    alpha: latency (seconds)
+    beta: 1/bandwidth (seconds/byte)
     """
-    t1 = t0 + dt
-    return x_of_t(t1, alpha, beta1, beta2, S0) - x_of_t(t0, alpha, beta1, beta2, S0)
+    # Make sure we only consider time outside of latency.
+    non_latency_time = max(0, dt - max(0, alpha - t0))
+
+    return non_latency_time / (beta / max(active_transmits, 1))

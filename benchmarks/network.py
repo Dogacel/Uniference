@@ -36,7 +36,7 @@ def train_model(rtt: float, bandwidth: float, knee: float, bytes: list, means: l
     print(f"params: {json.dumps(params)}")
 
 
-def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv", output_file="network_results.json"):
+def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="network_results.json"):
     dist.init_process_group(os.getenv("DIST_BACKEND", "gloo"))
     rank = dist.get_rank()
     world_size = dist.get_world_size()
@@ -55,6 +55,7 @@ def run(num_latency_tests=100, num_bw_tests=10, mode="send_recv", output_file="n
             dist.recv(tensor, src=0)
             dist.send(tensor, dst=0)
         dist.barrier()
+        time.sleep(0.1)
 
     if rank == 0:
         mean = sum(latencies) / len(latencies)

@@ -52,7 +52,7 @@ def setup_world(device_count: int, seq_len: int, output_file: str, program: Call
     world.network(
         NetworkArgs(
             devices=devices,
-            network_params=[5.50000006e-04, 8.33730502e-09, 1.30408584e-08, 6.55360000e04],
+            network_params=[0.003223, 2 * 1.5654e-08],
         )
     )
 
