@@ -2,10 +2,6 @@ from programs.yield_perf_program import RawMessage
 from simsuite.world import World, Program
 from simsuite.device import DeviceArgs
 from simsuite.network import NetworkArgs
-from simsuite.units import TFLOPs
-from simsuite.units import ms
-from simsuite.units import Gbps
-from simsuite.units import GB
 from simsuite.device import DeviceSpec
 from typing import Callable, List
 
@@ -52,7 +48,7 @@ def setup_world(device_count: int, seq_len: int, output_file: str, program: Call
     world.network(
         NetworkArgs(
             devices=devices,
-            network_params=[0.003223, 2 * 1.5654e-08],
+            network_params=[0.0005, 1.02e-08],
         )
     )
 

@@ -6,13 +6,16 @@ import fire
 import os
 
 def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="network_results.json"):
-    dist.init_process_group(os.getenv("DIST_BACKEND", "gloo"))
+    backend = os.getenv("DIST_BACKEND", "gloo")
+    device = os.getenv("DEVICE", "cuda" if backend == "nccl" else "cpu")
+
+    dist.init_process_group(backend=backend)
     rank = dist.get_rank()
     world_size = dist.get_world_size()
 
     # ---- Ping (latency) test ----
     latencies: list[float] = []
-    tensor = torch.zeros(1)
+    tensor = torch.zeros(1, device=device)
     for _ in range(num_latency_tests):
         if rank == 0:
             start = time.perf_counter()
@@ -77,8 +80,8 @@ def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="ne
     sizes_means = []
     for size_bytes in sizes_bytes:
         num_floats = max(1, size_bytes // 4)  # float32 is 4 bytes
-        big = torch.ones(num_floats, dtype=torch.float32)
-        to_gather = [torch.zeros(num_floats, dtype=torch.float32) for _ in range(world_size)]
+        big = torch.ones(num_floats, dtype=torch.float32, device=device)
+        to_gather = [torch.zeros(num_floats, dtype=torch.float32, device=device) for _ in range(world_size)]
         bw_results = []
         time_results = []
         for _ in range(num_bw_tests):

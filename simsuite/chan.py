@@ -67,14 +67,14 @@ class Chan:
             receiver = self.subscribers[receiver_id]
             sender = self.subscribers[sender_id]
 
-            self.send(me, my_share, f"all_gather_{id}_{me.name}_{receiver.name}_{i}")
+            self.send(me, my_share, f"all_gather_{id}_{me.name}_{receiver.name}_{i}", sender=sender)
             new_share = self.receive(me, f"all_gather_{id}_{sender.name}_{me.name}_{i}")
 
             items[sender_id] = new_share
 
         return items
 
-    def send(self, me: Device, data: Any, transmit_id: str, force_time: Optional[float] = None):
+    def send(self, me: Device, data: Any, transmit_id: str, sender: Device, force_time: Optional[float] = None):
         # TODO: Currently single network is supported
         network = me.world.networks[0]
 
@@ -94,7 +94,7 @@ class Chan:
         assert size > 0
 
         dprint(f"[{me.state.clock}] Chan {self.name} send() size={size} time={time} id={transmit_id}")
-        network.transmit(data, size=size, world_time=time, id=transmit_id)
+        network.transmit(data, size=size, world_time=time, id=transmit_id, source=me, target=None)
         self.world.xyield(me, f"chan {self.name} send()")
 
     def receive(self, me: Device, transmit_id: str) -> Any:

@@ -26,6 +26,8 @@ class Transmit:
     transferred_so_far: float
     id: str
     internal_id: int
+    source_device: Device
+    target_device: Device
     internal_clock: float = 0.0
     end_time: Optional[float] = None
 
@@ -55,13 +57,15 @@ class Network:
         self.internal_id_counter = 0
         self.network_params = args.network_params
 
-    def transmit(self, data: Any, size: float, world_time: float, id: str):
+    def transmit(self, data: Any, size: float, world_time: float, id: str, source: Device, target: Device):
         """
         When a network transmit starts, we re-estimate arrival times for all
         in-flight transmits, and then schedule the new transmit.
         """
 
-        transmit = Transmit(data, size, world_time, 0.0, id, self.internal_id_counter)
+        transmit = Transmit(
+            data, size, world_time, 0.0, id, self.internal_id_counter, source_device=source, target_device=target
+        )
         self.internal_id_counter += 1
         self.transmits.append(transmit)
         self.world.event_logger.log_event(
@@ -110,15 +114,23 @@ class Network:
             dprint(f"Network already at or beyond max_time {max_time} with internal clock {self.internal_clock}.")
             return (self.internal_clock, None)
 
-        def active_transmits() -> int:
-            return len([t for t in self.transmits if not t.completed() and t.start_time <= self.internal_clock])
+        def active_transmits(transmit: Transmit) -> int:
+            return len(
+                [
+                    t
+                    for t in self.transmits
+                    if not t.completed()
+                    and t.start_time <= self.internal_clock
+                    and t.source_device == transmit.source_device
+                ]
+            )
 
         # Helper to compute true bandwidth based on full/half duplex setting.
         def true_bandwidth(transmit: Transmit, delta_time: float) -> float:
             transferred = bytes_transferred_in_window(
                 transmit.internal_clock,
                 delta_time,
-                active_transmits(),
+                active_transmits(transmit),
                 *self.network_params,
             )
 
@@ -133,7 +145,7 @@ class Network:
             duration_for_transmit = duration_for(
                 transmit.internal_clock,
                 (transmit.size - transmit.transferred_so_far) / 8,
-                active_transmits(),
+                active_transmits(transmit),
                 *self.network_params,
             )
 
@@ -203,7 +215,7 @@ class Network:
                 # Simulate events happened between [internal_clock, max_time]
                 transmit.transferred_so_far += true_bandwidth(transmit, time_delta)
                 transmit.internal_clock += time_delta
-    
+
                 if transmit.transferred_so_far > transmit.size + 1:
                     breakpoint()
 

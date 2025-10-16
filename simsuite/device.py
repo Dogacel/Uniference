@@ -79,4 +79,4 @@ class Device:
         self.terminated = True
 
     def send(self, chan: str, data: Any, transmit_id: str, force_time: Optional[float] = None):
-        self.world.chan(chan).send(self, data, transmit_id, force_time)
+        self.world.chan(chan).send(self, data, transmit_id, sender=self, force_time=force_time)
