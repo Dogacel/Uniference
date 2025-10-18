@@ -177,8 +177,9 @@ class Attention(nn.Module):
 
     def insert_cache_value(self, start_pos: int, xk: torch.Tensor, xv: torch.Tensor):
         seqlen = xk.shape[1]
-        self.cache_k[:1, start_pos : start_pos + seqlen] = xk
-        self.cache_v[:1, start_pos : start_pos + seqlen] = xv
+        batch_size = xk.shape[0]
+        self.cache_k[:batch_size, start_pos : start_pos + seqlen] = xk
+        self.cache_v[:batch_size, start_pos : start_pos + seqlen] = xv
         self.cache_known[start_pos : start_pos + seqlen] = 1
 
     def clean_cache(self):

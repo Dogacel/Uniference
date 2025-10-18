@@ -24,7 +24,13 @@ def get_prompt_sequence_first_n(prompt: str, n: int) -> str:
     return prompt[: pos + 1]
 
 
-def setup_world(device_count: int, seq_len: int, output_file: str, program: Callable[..., Program]) -> World:
+def setup_world(
+    device_count: int,
+    seq_len: int,
+    output_file: str,
+    program: Callable[..., Program],
+    batch_size: int = 1,
+) -> World:
     world = World(debug_run=False, output_file=output_file)
 
     device_spec = DeviceSpec()
@@ -39,6 +45,7 @@ def setup_world(device_count: int, seq_len: int, output_file: str, program: Call
                 top_p=1.0,
                 max_seq_len=seq_len,
                 max_tokens=1,
+                max_batch_size=batch_size,
             ),
         )
         devices.append(device)

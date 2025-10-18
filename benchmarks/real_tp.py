@@ -15,10 +15,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--device_count", type=int, default=1, help="Number of devices")
     parser.add_argument("output_file", nargs="?", default="run_report.json", help="Output file name")
+    parser.add_argument("--batch_size", type=int, default=1, help="Batch size for generation")
     parsed_args = parser.parse_args(args)
 
     device_count = parsed_args.device_count
     output_file = "results/" + parsed_args.output_file
+    batch_size = parsed_args.batch_size
     prompt = load_prompt("checkpoints/prompt_5000.txt")
 
     text_lengths = [8, 16, 32, 64, 128, 256, 512]
@@ -30,6 +32,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         seq_len=8192,
         output_file=output_file,
         program=lambda **kwargs: TensorParallelProgram(**kwargs),
+        batch_size=batch_size,
     )
 
     # Generate Cartesian product
