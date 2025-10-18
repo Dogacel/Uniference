@@ -17,7 +17,7 @@ class WorldEventLogger:
         transmit_count = 0
 
         for record in self.events:
-            if record.get("action") == "transmit_end" and "duration" in record:
+            if record.get("action") == "transmit_end" and "duration" in record and record["duration"] > 0:
                 total_duration += record["duration"]
                 transmit_count += 1
 

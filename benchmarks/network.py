@@ -5,7 +5,8 @@ import torch.distributed as dist
 import fire
 import os
 
-def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="network_results.json"):
+
+def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="network_results.json", size_multiplier=1):
     backend = os.getenv("DIST_BACKEND", "gloo")
     device = os.getenv("DEVICE", "cuda" if backend == "nccl" else "cpu")
 
@@ -79,6 +80,7 @@ def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="ne
     bandwidth_means = []
     sizes_means = []
     for size_bytes in sizes_bytes:
+        size_bytes = size_bytes * size_multiplier
         num_floats = max(1, size_bytes // 4)  # float32 is 4 bytes
         big = torch.ones(num_floats, dtype=torch.float32, device=device)
         to_gather = [torch.zeros(num_floats, dtype=torch.float32, device=device) for _ in range(world_size)]
@@ -135,7 +137,6 @@ def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="ne
         print(f"Saving raw results to {output_file}...")
         with open(output_file, "w") as f:
             json.dump(samples, f)
-
 
 
 if __name__ == "__main__":

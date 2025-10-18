@@ -167,14 +167,6 @@ export WORLD_SIZE=2
 
 # Jetson Nano doesn't work with nccl
 export DIST_BACKEND=gloo
-
-# Replace master addr with the result found above.
-export MASTER_ADDR=172.41.212.5
-export MASTER_PORT=25001
-export WORLD_BACKEND=pytorch
-export DIST_BACKEND=nccl
-export WORLD_SIZE=2
-export RANK=1
 ```
 
 ## Network Simulation
