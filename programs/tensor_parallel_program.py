@@ -29,7 +29,7 @@ class TensorParallelProgram(Program):
         temperature: float = 0.6,
         top_p: float = 0.9,
         max_seq_len: int = 512,
-        max_batch_size: int = 512,
+        max_batch_size: int = 128,
         world_size: Optional[int] = None,
         quantization_mode: Optional[str] = None,
         disable_kv_cache: bool = False,
@@ -92,7 +92,7 @@ class TensorParallelProgram(Program):
         input = world.chan("input").receive(me, "starting_input")
 
         def evaluate(model: Llama3, dialog: list[RawMessage], exit_early: bool = False):
-            batch = [dialog] * 512
+            batch = [dialog] * 128
 
             generated_token_count = 0
 
