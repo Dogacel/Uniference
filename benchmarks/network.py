@@ -22,6 +22,8 @@ def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="ne
             start = time.perf_counter()
             dist.send(tensor, dst=1)
             dist.recv(tensor, src=1)
+            if backend == "nccl":
+                torch.cuda.synchronize()
             end = time.perf_counter()
             latencies.append((end - start) * 1000)
         elif rank == 1:
@@ -96,6 +98,9 @@ def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="ne
                 elif mode == "all_gather":
                     dist.all_gather(to_gather, big)
 
+                if backend == "nccl":
+                    torch.cuda.synchronize()
+
                 end = time.perf_counter()
                 elapsed = end - start
                 mbps = size_bytes / elapsed  # send + recv, MB/s
@@ -108,6 +113,8 @@ def run(num_latency_tests=100, num_bw_tests=5, mode="send_recv", output_file="ne
                     dist.send(big, dst=0)
                 elif mode == "all_gather":
                     dist.all_gather(to_gather, big)
+                if backend == "nccl":
+                    torch.cuda.synchronize()
             dist.barrier()
             time.sleep(0.1)
 
