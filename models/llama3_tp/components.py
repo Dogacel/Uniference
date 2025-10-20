@@ -317,11 +317,13 @@ def scatter_to_model_parallel_region(input_: torch.Tensor, me: Device) -> torch.
 
 def reduce_from_model_parallel_region(input_: torch.Tensor, me: Device) -> torch.Tensor:
     if me.world.backend == "pytorch":
+        world_size = get_model_parallel_world_size()
         me.world.event_logger.log_event(
             {
                 "time": me.state.sync_clock(),
                 "action": "transmit_start",
-                "size": input_.element_size() * input_.nelement(),
+                "transfers": world_size - 1,
+                "size": input_.element_size() * input_.nelement() * (world_size - 1),
             }
         )
 
@@ -338,20 +340,19 @@ def reduce_from_model_parallel_region(input_: torch.Tensor, me: Device) -> torch
         )
         return result
 
-    # TODO: A network efficient implementation is possible.
-
-    result = me.world.chan("all_gather").all_gather(me, input_, "reduce_from_model_parallel_region")
-    result = torch.stack(result, dim=0).sum(dim=0)
+    result = me.world.chan("all_gather").all_reduce(me, input_, "reduce_from_model_parallel_region")
     return result
 
 
 def gather_from_model_parallel_region(input_: torch.Tensor, me: Device) -> torch.Tensor:
     if me.world.backend == "pytorch":
+        world_size = get_model_parallel_world_size()
         me.world.event_logger.log_event(
             {
                 "time": me.state.sync_clock(),
                 "action": "transmit_start",
-                "size": input_.element_size() * input_.nelement(),
+                "transfers": (world_size - 1),
+                "size": input_.element_size() * input_.nelement() * (world_size - 1) / (world_size),
             }
         )
 

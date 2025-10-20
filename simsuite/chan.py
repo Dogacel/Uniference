@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import numpy as np
+import torch
+
 from dataclasses import dataclass
 from typing import Any, Callable, TYPE_CHECKING, Optional
 from torch import Tensor
@@ -70,9 +73,63 @@ class Chan:
             self.send(me, my_share, f"all_gather_{id}_{me.name}_{receiver.name}_{i}", sender=sender)
             new_share = self.receive(me, f"all_gather_{id}_{sender.name}_{me.name}_{i}")
 
-            items[sender_id] = new_share
+            items[sender_id] = new_share.to(my_share.device)
 
         return items
+
+    def all_reduce(self, me: Device, my_value: Any, id: str, reduce_fn: Callable[[Any, Any], Any] = lambda x, y: sum(x, y)) -> Any:
+        """
+        Ring all-reduce over the last axis of `my_value`.
+        Each rank starts by sending chunk (rank-1).
+        After reduce-scatter, rank r holds reduced chunk r.
+        """
+        r = self.rank(me)
+        P = len(self.subscribers)
+        rounds = P - 1
+
+        # ---- Split last axis into P contiguous chunks ----
+        L = my_value.shape[-1]
+        if L % P != 0:
+            # handle uneven splits robustly
+            chunks = np.array_split(my_value, P, axis=-1)
+            # stack into a new "chunk axis" = -2 (just before last)
+            partial = np.stack(chunks, axis=-2)   # shape: [..., P, chunk_len_r]
+        else:
+            chunk = L // P
+            # reshape to expose a chunk axis of length P
+            partial = my_value.reshape(*my_value.shape[:-1], P, chunk)  # shape: [..., P, chunk]
+
+        left  = (r - 1) % P   # neighbor we receive from
+        right = (r + 1) % P   # neighbor we send to
+
+        # ---- Reduce-scatter (start by sending chunk r-1) ----
+        for i in range(rounds):
+            send_idx = (r - 1 - i) % P      # r-1, r-2, ..., r-(P-1)
+            recv_idx = (r - 2 - i) % P      # r-2, r-3, ..., r-P
+
+            # Send our current chunk
+            self.send(
+                me,
+                partial[..., send_idx, :],
+                f"all_reduce_reduce_{id}_{me.name}_{self.subscribers[right].name}_{i}",
+                sender=me,
+            )
+
+            # Receive neighbor's chunk and reduce into our recv slot
+            incoming = self.receive(
+                me,
+                f"all_reduce_reduce_{id}_{self.subscribers[left].name}_{me.name}_{i}"
+            )
+            partial[..., recv_idx, :] = reduce_fn(partial[..., recv_idx, :], incoming)
+
+        # After RS, rank r owns reduced chunk r on the chunk axis
+        my_share = partial[..., r, :]
+
+        # ---- All-gather (circulate reduced chunks) ----
+        gathered = self.all_gather(me, my_share, f"all_reduce_gather_{id}")
+        # `gathered` should be ordered by rank 0..P-1; concatenate along last axis
+        result = torch.cat(gathered, axis=-1)
+        return result
 
     def send(self, me: Device, data: Any, transmit_id: str, sender: Device, force_time: Optional[float] = None):
         # TODO: Currently single network is supported

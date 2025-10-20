@@ -65,6 +65,7 @@ analysis = [
     "statsmodels",
     "SALib",
     "plotly",
+    "kaleido",
 ]
 
 [tool.setuptools]
