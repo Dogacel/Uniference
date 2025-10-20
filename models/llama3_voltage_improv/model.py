@@ -81,6 +81,7 @@ def unstride_torch(shards: list[Tensor], dim: int = 0) -> Tensor:
         out[tuple(idx)] = s
     return out
 
+
 def apply_scaling(freqs: torch.Tensor) -> torch.Tensor:
     # Values obtained from grid search
     scale_factor = 8
@@ -325,20 +326,23 @@ class TransformerBlock(nn.Module):
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
         self.me = args.me
 
+    def clean_cache(self):
+        self.attention.clean_cache()
+
     def forward(
         self,
         x: torch.Tensor,
         freqs_cis: torch.Tensor,
         mask: Optional[torch.Tensor],
-        all_gather_token: Optional[Any],
+        all_gather_recv: Optional[Any],
     ):
         me = self.me
         world = me.world
         forward_chan = world.chan("forward")
         rank = forward_chan.rank(me)
-        total = len(forward_chan.subscribers)
+        total = forward_chan.size()
 
-        if all_gather_token is None:
+        if all_gather_recv is None:
             xp = torch.tensor_split(x, total, dim=1)[rank]
         else:
             xp = x
@@ -348,8 +352,8 @@ class TransformerBlock(nn.Module):
             freqs_cis_xq = torch.tensor_split(freqs_cis, total, dim=0)[rank]
             xq = self.attention(xp_norm, None, None, None, freqs_cis_xq, None, mode="xq")
 
-        if all_gather_token is not None:
-            real_x = forward_chan.all_gather_async_await(all_gather_token)
+        if all_gather_recv is not None:
+            real_x = all_gather_recv()
             x = torch.cat(real_x, dim=1)
 
         x_norm = self.attention_norm(x)
@@ -363,9 +367,10 @@ class TransformerBlock(nn.Module):
         with torch.profiler.record_function(f"ffn"):
             out = h + self.feed_forward(self.ffn_norm(h))
 
-        all_gather_token = forward_chan.all_gather_async(me, out)
+        (send, recv) = forward_chan.all_gather_async(me, out, f"layer_{self.layer_id}_forward")
+        send()
 
-        return out, all_gather_token
+        return out, recv
 
 
 class Transformer(nn.Module):
@@ -395,6 +400,11 @@ class Transformer(nn.Module):
         self.use_kv_cache = params.use_kv_cache
         self.me = params.me
 
+    def clean_cache(self):
+        for layer in self.layers:
+            if isinstance(layer, TransformerBlock):
+                layer.clean_cache()
+
     @torch.inference_mode()
     def forward(self, tokens: torch.Tensor, start_pos: int):
         _bsz, seqlen = tokens.shape
@@ -407,7 +417,7 @@ class Transformer(nn.Module):
         world = me.world
         forward_chan = world.chan("forward")
         rank = forward_chan.rank(me)
-        total = len(forward_chan.subscribers)
+        total = forward_chan.size()
 
         mask = None
         if seqlen > 1:
@@ -434,11 +444,11 @@ class Transformer(nn.Module):
             partition_end = splits[rank][-1].item() + 1  # +1 because slicing is exclusive
             mask = mask[partition_start:partition_end, :]
 
-        all_gather_token = None
+        all_gather_recv = None
         for layer in self.layers:
-            h, all_gather_token = layer(h, freqs_cis, mask, all_gather_token=all_gather_token)
+            h, all_gather_recv = layer(h, freqs_cis, mask, all_gather_recv=all_gather_recv)
 
-        h = forward_chan.all_gather_async_await(all_gather_token)
+        h = all_gather_recv() if all_gather_recv is not None else [h]
         h = torch.cat(h, dim=1)
 
         h = self.norm(h)

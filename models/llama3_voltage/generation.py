@@ -71,9 +71,10 @@ class Llama3:
                 torch.distributed.init_process_group("gloo")
 
         if not model_parallel_is_initialized():
-            if world_size is None:
-                world_size = int(os.environ.get("WORLD_SIZE", 1))
-            initialize_model_parallel(world_size)
+            # if world_size is None:
+            #     world_size = int(os.environ.get("WORLD_SIZE", 1))
+            # Disable model parallelism for Voltage
+            initialize_model_parallel(1)
 
         local_rank = int(os.environ.get("LOCAL_RANK", 0))
         if device.type == "cuda":
@@ -153,12 +154,12 @@ class Llama3:
     #     msg = SyncGen(pos=pos, next_token=next_token)
     #     self.args.me.send("gen", msg)
 
-    # def clean_cache(self):
-    #     if isinstance(self.model, Transformer):
-    #         self.model.clean_cache()
-    #     else:
-    #         raise TypeError(f"Model is not a Transformer, but {type(self.model)}")
-    #     self.gen_cache.clear()
+    def clean_cache(self):
+        if isinstance(self.model, Transformer):
+            self.model.clean_cache()
+        else:
+            raise TypeError(f"Model is not a Transformer, but {type(self.model)}")
+        self.gen_cache.clear()
 
     @torch.inference_mode()
     def generate(
@@ -239,21 +240,27 @@ class Llama3:
             if self.model.use_kv_cache:
                 world.chan("pre_processed_input").broadcast(
                     me,
-                    {
-                        "tokens": tokens[:, prev_pos:cur_pos],
-                        "prev_pos": prev_pos,
-                    },
+                    [
+                        {
+                            "tokens": tokens[:, prev_pos:cur_pos],
+                            "prev_pos": prev_pos,
+                        }
+                    ],
                     "tokens",
+                    source=0,
                 )
                 logits = self.model.forward(tokens[:, prev_pos:cur_pos], prev_pos)
             else:
                 world.chan("pre_processed_input").broadcast(
                     me,
-                    {
-                        "tokens": tokens[:, :cur_pos],
-                        "prev_pos": prev_pos,
-                    },
+                    [
+                        {
+                            "tokens": tokens[:, :cur_pos],
+                            "prev_pos": prev_pos,
+                        }
+                    ],
                     "tokens",
+                    source=0,
                 )
                 logits = self.model.forward(tokens[:, :cur_pos], prev_pos)
 
@@ -301,7 +308,7 @@ class Llama3:
                 break
 
         # Termination signal
-        world.chan("pre_processed_input").broadcast(me, None, "tokens", force_send=True)
+        world.chan("pre_processed_input").broadcast(me, None, "tokens", source=0, force_send=True)
 
     def completion(
         self,
@@ -352,7 +359,15 @@ class Llama3:
         me = self.args.me
         world = me.world
 
-        while (pre_processed_input := world.chan("pre_processed_input").broadcast(me, None, "tokens")) is not None:
+        while (
+            pre_processed_input := world.chan("pre_processed_input").broadcast(me, None, "tokens", source=0)
+        ) is not None:
+            if isinstance(pre_processed_input, list):
+                pre_processed_input = pre_processed_input[0]
+
+            if pre_processed_input is None:
+                break
+
             tokens = pre_processed_input["tokens"]
             prev_pos = pre_processed_input["prev_pos"]
             self.model.forward(tokens, prev_pos)

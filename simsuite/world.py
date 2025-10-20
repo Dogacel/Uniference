@@ -16,6 +16,7 @@ from simsuite.event_logger import WorldEventLogger
 from simsuite.network import Network, NetworkArgs
 from simsuite.profiler import TorchProfiler
 from simsuite.common import dprint
+from simsuite.pytorch_chan import PytorchChan
 
 
 class PreparedEvent:
@@ -139,7 +140,10 @@ class World:
         for chan in self.chans:
             if chan.name == tag:
                 return chan
-        new_chan = Chan(tag, self)
+        if self.backend == "pytorch":
+            new_chan = PytorchChan(tag, self)   
+        else:
+            new_chan = Chan(tag, self)
         self.chans.append(new_chan)
         self.event_logger.log_event({"chan": tag, "action": "created"})
         return new_chan

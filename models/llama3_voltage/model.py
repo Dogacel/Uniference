@@ -224,7 +224,7 @@ class Attention(nn.Module):
         world = me.world
         forward_chan = world.chan("forward")
         rank = forward_chan.rank(me)
-        total = len(forward_chan.subscribers)
+        total = forward_chan.size()
 
         # Partition the input matrix x based on rank and total
         xp = torch.tensor_split(x, total, dim=1)[rank]
@@ -328,7 +328,7 @@ class TransformerBlock(nn.Module):
         world = me.world
         forward_chan = world.chan("forward")
         rank = forward_chan.rank(me)
-        total = len(forward_chan.subscribers)
+        total = forward_chan.size()
         xp = torch.tensor_split(x, total, dim=1)[rank]
 
         h = xp + self.attention(self.attention_norm(x), start_pos, freqs_cis, mask)
@@ -391,7 +391,7 @@ class Transformer(nn.Module):
         world = me.world
         forward_chan = world.chan("forward")
         rank = forward_chan.rank(me)
-        total = len(forward_chan.subscribers)
+        total = forward_chan.size()
 
         mask = None
         if seqlen > 1:

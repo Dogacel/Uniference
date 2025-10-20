@@ -1,3 +1,4 @@
+import fire
 import json
 import sys
 import pathlib
@@ -28,10 +29,21 @@ def read_custom_events(path):
     for e in data:
         if "device" in e and "action" in e and e["action"] in {"send"}:
             grouped[e.get("device")].append(e)
+        if (
+            "target_device" in e
+            and "source_device" in e
+            and "action" in e
+            and e["action"] in {"transmit_start", "transmit_end"}
+        ):
+            grouped[e.get("target_device")].append(e)
+            grouped[e.get("source_device")].append(e)
+
     return grouped
 
 
-def merge_traces(paths, out_path, mode="concat", group_prefix=None, normalize_logical_clock=False, custom_events=None):
+def merge_traces(
+    paths, out_path, mode="concat", group_prefix=None, normalize_logical_clock=False, custom_events=None, my_device=None
+):
     """
     mode = 'concat' -> append traces one after another in time
            'align'  -> align all traces so each starts at the same ts as the first trace
@@ -119,17 +131,35 @@ def merge_traces(paths, out_path, mode="concat", group_prefix=None, normalize_lo
     },
     """
     if custom_events:
-        for e in custom_events:
+        network_events = [e for e in custom_events if e.get("action") in {"transmit_start", "transmit_end"}]
+        network_events_by_id = {}
+        for e in network_events:
+            eid = e.get("internal_id")
+            if eid is not None:
+                if eid not in network_events_by_id:
+                    network_events_by_id[eid] = {}
+
+                network_events_by_id[eid]["mode"] = "send" if e["source_device"] == my_device else "receive"
+
+                if e["action"] == "transmit_start":
+                    network_events_by_id[eid]["transmit_start"] = e.get("time", 0)
+                    network_events_by_id[eid]["size"] = e.get("size", 0)
+
+                elif e["action"] == "transmit_end":
+                    network_events_by_id[eid]["transmit_end"] = e.get("time", 0)
+
+        for eid, e in network_events_by_id.items():
             event = {
                 "ph": "X",
                 "cat": "user_annotation",
-                "name": e.get("action", "custom_event"),
+                "name": "all_gather (" + e.get("mode", "unknown") + ")",
                 "pid": process_pid,
                 "tid": "network",
-                "ts": e.get("time", 0) * 1_000_000,  # assuming time is in seconds, convert to us
-                "dur": e.get("arrive_at", 0) * 1_000_000 - e.get("time", 0) * 1_000_000,  # in us
+                "ts": e.get("transmit_start", 0) * 1_000_000,  # assuming time is in seconds, convert to us
+                "dur": e.get("transmit_end", 0) * 1_000_000 - e.get("transmit_start", 0) * 1_000_000,  # in us
                 "args": {
                     "External id": e.get("id", 0),
+                    "Size (bits)": e.get("size", 0),
                 },
             }
             merged.append(event)
@@ -154,47 +184,39 @@ def group_by_prefix(file_list, delimiter="_run."):
     return groups
 
 
-if __name__ == "__main__":
-    # Usage:
-    #   python trace_merger.py out.json folder_path [--normalize-logical-clock]
-    #   python trace_merger.py out.json mode file1.json file2.json ... [--normalize-logical-clock]
-    # If folder_path is given, will group by prefix, merge each group with 'concat', then merge all with 'align'.
-    normalize_logical_clock = False
-    args = sys.argv[1:]
-    if "--normalize-logical-clock" in args:
-        normalize_logical_clock = True
-        args.remove("--normalize-logical-clock")
+def run(
+    out: str,
+    profile_folder="profile_out",
+    event_log_file="event_log.jsonl",
+    normalize_logical_clock=True,
+    **kwargs,
+):
+    profile_folder = pathlib.Path(profile_folder)
+    custom_events = read_custom_events(profile_folder / event_log_file)
+    all_files = sorted(str(p) for p in profile_folder.glob("*.pt.trace.json"))
+    if not all_files:
+        print(f"No .json files found in {profile_folder}")
+        sys.exit(1)
+    groups = group_by_prefix(all_files)
+    group_outputs = []
+    temp_dir = profile_folder / "_tmp_merge"
+    temp_dir.mkdir(exist_ok=True)
+    for prefix, files in groups.items():
+        group_out = temp_dir / f"{prefix}_concat.json"
+        merge_traces(
+            files,
+            group_out,
+            mode="concat",
+            group_prefix=prefix,
+            normalize_logical_clock=normalize_logical_clock,
+            custom_events=custom_events.get(prefix, []),
+            my_device=prefix,
+        )
+        group_outputs.append(str(group_out))
+    # Now align all group outputs
+    merge_traces(group_outputs, out, mode="align", normalize_logical_clock=normalize_logical_clock)
+    print(f"Merged {len(all_files)} traces from {len(groups)} groups -> {out} (group-concat, then align)")
 
-    if len(args) == 2 and pathlib.Path(args[1]).is_dir():
-        out = args[0]
-        folder = pathlib.Path(args[1])
-        custom_events = read_custom_events(folder / "event_log.jsonl")
-        all_files = sorted(str(p) for p in folder.glob("*.pt.trace.json"))
-        if not all_files:
-            print(f"No .json files found in {folder}")
-            sys.exit(1)
-        groups = group_by_prefix(all_files)
-        group_outputs = []
-        temp_dir = folder / "_tmp_merge"
-        temp_dir.mkdir(exist_ok=True)
-        for prefix, files in groups.items():
-            group_out = temp_dir / f"{prefix}_concat.json"
-            merge_traces(
-                files,
-                group_out,
-                mode="concat",
-                group_prefix=prefix,
-                normalize_logical_clock=normalize_logical_clock,
-                custom_events=custom_events.get(prefix, []),
-            )
-            group_outputs.append(str(group_out))
-        # Now align all group outputs
-        merge_traces(group_outputs, out, mode="align", normalize_logical_clock=normalize_logical_clock)
-        print(f"Merged {len(all_files)} traces from {len(groups)} groups -> {out} (group-concat, then align)")
-    else:
-        # Fallback to original CLI
-        out = args[0]
-        mode = args[1] if len(args) > 2 else "concat"
-        files = args[2:] if len(args) > 2 else args[1:]
-        merge_traces(files, out, mode, normalize_logical_clock=normalize_logical_clock)
-        print(f"Merged {len(files)} traces -> {out} (mode={mode})")
+
+if __name__ == "__main__":
+    fire.Fire(run)

@@ -6,6 +6,7 @@ import torch
 from dataclasses import dataclass
 from typing import Any, Callable, TYPE_CHECKING, Optional
 from torch import Tensor
+import torch.distributed as dist
 from simsuite.common import dprint
 
 if TYPE_CHECKING:
@@ -40,17 +41,20 @@ class Chan:
     def rank(self, device: Device) -> int:
         return self.subscribers.index(device) if device in self.subscribers else -1
 
-    def broadcast(self, me: Device, data: Any, id: str, force_send: bool = False) -> Any:
+    def size(self) -> int:
+        return len(self.subscribers)
+
+    def broadcast(self, me: Device, data: Any, id: str, source: int, force_send: bool = False) -> Any:
         """
         Broadcasts data to all subscribers, including self.
         """
-        if data is None and not force_send:
+        if source != self.rank(me) and not force_send:
             result = self.receive(me, f"broadcast_{id}_{me.name}")
             return result
         else:
             for device in self.subscribers:
                 if device != me:
-                    self.send(me, data, f"broadcast_{id}_{device.name}")
+                    self.send(me, data, f"broadcast_{id}_{device.name}", target=device)
             return data
 
     def all_gather(self, me: Device, my_share: Any, id: str) -> list[Any]:
@@ -70,14 +74,52 @@ class Chan:
             receiver = self.subscribers[receiver_id]
             sender = self.subscribers[sender_id]
 
-            self.send(me, my_share, f"all_gather_{id}_{me.name}_{receiver.name}_{i}", sender=sender)
+            self.send(
+                me,
+                my_share,
+                f"all_gather_{id}_{me.name}_{receiver.name}_{i}",
+                target=self.subscribers[receiver_id],
+            )
             new_share = self.receive(me, f"all_gather_{id}_{sender.name}_{me.name}_{i}")
 
             items[sender_id] = new_share.to(my_share.device)
 
         return items
 
-    def all_reduce(self, me: Device, my_value: Any, id: str, reduce_fn: Callable[[Any, Any], Any] = lambda x, y: sum(x, y)) -> Any:
+    def all_gather_async(self, me: Device, my_share: Any, id: str):
+        my_order = self.rank(me)
+        rounds = len(self.subscribers) - 1
+
+        def send():
+            for i in range(rounds):
+                receiver_id = (my_order + i + 1) % len(self.subscribers)
+                receiver = self.subscribers[receiver_id]
+
+                self.send(
+                    me,
+                    my_share,
+                    f"all_gather_{id}_{me.name}_{receiver.name}_{i}",
+                    target=self.subscribers[receiver_id],
+                )
+
+        def receive():
+            items = [None for _ in range(len(self.subscribers))]
+            items[my_order] = my_share
+
+            for i in range(rounds):
+                sender_id = (my_order - i - 1) % len(self.subscribers)
+                sender = self.subscribers[sender_id]
+
+                new_share = self.receive(me, f"all_gather_{id}_{sender.name}_{me.name}_{i}")
+                items[sender_id] = new_share.to(my_share.device)
+
+            return items
+
+        return send, receive
+
+    def all_reduce(
+        self, me: Device, my_value: Any, id: str, reduce_fn: Callable[[Any, Any], Any] = lambda x, y: sum(x, y)
+    ) -> Any:
         """
         Ring all-reduce over the last axis of `my_value`.
         Each rank starts by sending chunk (rank-1).
@@ -93,33 +135,30 @@ class Chan:
             # handle uneven splits robustly
             chunks = np.array_split(my_value, P, axis=-1)
             # stack into a new "chunk axis" = -2 (just before last)
-            partial = np.stack(chunks, axis=-2)   # shape: [..., P, chunk_len_r]
+            partial = np.stack(chunks, axis=-2)  # shape: [..., P, chunk_len_r]
         else:
             chunk = L // P
             # reshape to expose a chunk axis of length P
             partial = my_value.reshape(*my_value.shape[:-1], P, chunk)  # shape: [..., P, chunk]
 
-        left  = (r - 1) % P   # neighbor we receive from
-        right = (r + 1) % P   # neighbor we send to
+        left = (r - 1) % P  # neighbor we receive from
+        right = (r + 1) % P  # neighbor we send to
 
         # ---- Reduce-scatter (start by sending chunk r-1) ----
         for i in range(rounds):
-            send_idx = (r - 1 - i) % P      # r-1, r-2, ..., r-(P-1)
-            recv_idx = (r - 2 - i) % P      # r-2, r-3, ..., r-P
+            send_idx = (r - 1 - i) % P  # r-1, r-2, ..., r-(P-1)
+            recv_idx = (r - 2 - i) % P  # r-2, r-3, ..., r-P
 
             # Send our current chunk
             self.send(
                 me,
                 partial[..., send_idx, :],
                 f"all_reduce_reduce_{id}_{me.name}_{self.subscribers[right].name}_{i}",
-                sender=me,
+                target=self.subscribers[right],
             )
 
             # Receive neighbor's chunk and reduce into our recv slot
-            incoming = self.receive(
-                me,
-                f"all_reduce_reduce_{id}_{self.subscribers[left].name}_{me.name}_{i}"
-            )
+            incoming = self.receive(me, f"all_reduce_reduce_{id}_{self.subscribers[left].name}_{me.name}_{i}")
             partial[..., recv_idx, :] = reduce_fn(partial[..., recv_idx, :], incoming)
 
         # After RS, rank r owns reduced chunk r on the chunk axis
@@ -131,7 +170,7 @@ class Chan:
         result = torch.cat(gathered, axis=-1)
         return result
 
-    def send(self, me: Device, data: Any, transmit_id: str, sender: Device, force_time: Optional[float] = None):
+    def send(self, me: Device, data: Any, transmit_id: str, target: Device, force_time: Optional[float] = None):
         # TODO: Currently single network is supported
         network = me.world.networks[0]
 
@@ -146,12 +185,12 @@ class Chan:
             size = data.nbytes * 8
         else:
             size = 1
-            print("Data size estimation not implemented for type " + str(type(data)))
+            dprint("Data size estimation not implemented for type " + str(type(data)))
 
         assert size > 0
 
         dprint(f"[{me.state.clock}] Chan {self.name} send() size={size} time={time} id={transmit_id}")
-        network.transmit(data, size=size, world_time=time, id=transmit_id, source=me, target=None)
+        network.transmit(data, size=size, world_time=time, id=transmit_id, source=me, target=target)
         self.world.xyield(me, f"chan {self.name} send()")
 
     def receive(self, me: Device, transmit_id: str) -> Any:

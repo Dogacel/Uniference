@@ -30,8 +30,11 @@ def setup_world(
     output_file: str,
     program: Callable[..., Program],
     batch_size: int = 1,
+    program_kwargs: dict = {},
+    network_params=[0.0005, 1.02e-08],
+    world_kwargs: dict = {},
 ) -> World:
-    world = World(debug_run=False, output_file=output_file)
+    world = World(output_file=output_file, **world_kwargs)
 
     device_spec = DeviceSpec()
 
@@ -46,6 +49,7 @@ def setup_world(
                 max_seq_len=seq_len,
                 max_tokens=1,
                 max_batch_size=batch_size,
+                **program_kwargs,
             ),
         )
         devices.append(device)
@@ -55,7 +59,7 @@ def setup_world(
     world.network(
         NetworkArgs(
             devices=devices,
-            network_params=[0.0005, 1.02e-08],
+            network_params=network_params,
         )
     )
 

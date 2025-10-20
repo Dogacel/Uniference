@@ -74,6 +74,8 @@ class Network:
                 "action": "transmit_start",
                 "id": id,
                 "internal_id": transmit.internal_id,
+                "source_device": source.name,
+                "target_device": target.name,
                 "size": size / 8,
             }
         )
@@ -160,7 +162,7 @@ class Network:
         dprint("==============================")
 
         # Find the next transmit to complete.
-        available_transmits = [t for t in self.transmits if not t.completed()]
+        available_transmits = [t for t in self.transmits if not t.completed() and t.start_time <= self.internal_clock]
         first_to_end = min(available_transmits, key=end_time, default=None)
         # Find the time when the next transmit will end assuming there will be no changes in bandwidth.
         first_end_time = end_time(first_to_end)
@@ -188,7 +190,7 @@ class Network:
 
             for transmit in self.transmits:
                 # If the transmit hasn't started yet, skip it.
-                if transmit.start_time > self.internal_clock + time_delta or transmit.completed():
+                if transmit.start_time >= self.internal_clock + time_delta or transmit.completed():
                     continue
                 transmit.transferred_so_far += true_bandwidth(transmit, time_delta)
                 transmit.internal_clock += time_delta
@@ -236,6 +238,8 @@ class Network:
                         "id": transmit.id,
                         "internal_id": transmit.internal_id,
                         "duration": first_to_end.end_time - first_to_end.start_time,
+                        "source_device": transmit.source_device.name,
+                        "target_device": transmit.target_device.name,
                     }
                 )
 
