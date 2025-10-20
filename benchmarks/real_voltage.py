@@ -31,7 +31,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     text_lengths = [64, 128, 256]
     speed = [10 * Mbps] # , 100 * Mbps, 1 * Gbps]
     latency = [1 * ms] # , 5 * ms, 20 * ms]
-    repeats = 1
+    repeats = 10
 
     world = setup_world(
         device_count=device_count,
