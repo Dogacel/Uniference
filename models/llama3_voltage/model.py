@@ -418,10 +418,28 @@ class Transformer(nn.Module):
             partition_end = splits[rank][-1].item() + 1  # +1 because slicing is exclusive
             mask = mask[partition_start:partition_end, :]
 
+        # Gathered tensors will have different sizes if seqlen is not divisible by total
+        initial_size = h.size(1)
+        target_size = h.size(1) // world.chan("forward").size() + (1 if 0 < h.size(1) % total else 0)  
+
         for i, layer in enumerate(self.layers):
             h = layer(h, start_pos, freqs_cis, mask)
+
+            # All gather expects all tensors to have the same size, so pad if necessary
+            if h.size(1) < target_size:
+                last_vec = h[:, -1:, :].clone()
+                h = torch.cat([h, last_vec], dim=1)
+
             h = world.chan("forward").all_gather(me, h, f"forward_{i}")
-            h = torch.cat(h, dim=1)
+
+            # Remove padding if added
+            new_h = []
+            for i, elem in enumerate(h):
+                if initial_size % total != 0 and i < initial_size % total:
+                    elem = elem[:, :-1, :]
+                new_h.append(elem)
+
+            h = torch.cat(new_h, dim=1)
 
         h = self.norm(h)
         output = self.output(h).float()

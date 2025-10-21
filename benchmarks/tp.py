@@ -51,8 +51,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 }
             )
 
-            world.networks[0].bandwidth = speed
-            world.networks[0].latency = latency
+            world.networks[0].network_params = [latency, 1/speed]
 
             for device in world.devices:
                 device.send("input", [RawMessage(role="user", content=sub_prompt)], "starting_input")

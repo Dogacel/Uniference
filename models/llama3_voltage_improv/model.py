@@ -335,6 +335,8 @@ class TransformerBlock(nn.Module):
         freqs_cis: torch.Tensor,
         mask: Optional[torch.Tensor],
         all_gather_recv: Optional[Any],
+        initial_size: int,
+        target_size: int,
     ):
         me = self.me
         world = me.world
@@ -354,7 +356,13 @@ class TransformerBlock(nn.Module):
 
         if all_gather_recv is not None:
             real_x = all_gather_recv()
-            x = torch.cat(real_x, dim=1)
+            # Remove padding if added
+            new_x = []
+            for i, elem in enumerate(real_x):
+                if initial_size % total != 0 and i < initial_size % total:
+                    elem = elem[:, :-1, :]
+                new_x.append(elem)
+            x = torch.cat(new_x, dim=1)
 
         x_norm = self.attention_norm(x)
 
@@ -367,7 +375,14 @@ class TransformerBlock(nn.Module):
         with torch.profiler.record_function(f"ffn"):
             out = h + self.feed_forward(self.ffn_norm(h))
 
-        (send, recv) = forward_chan.all_gather_async(me, out, f"layer_{self.layer_id}_forward")
+        # All gather expects all tensors to have the same size, so pad if necessary
+        if out.size(1) < target_size:
+            last_vec = out[:, -1:, :].clone()
+            real_out = torch.cat([out, last_vec], dim=1)
+        else:
+            real_out = out
+
+        (send, recv) = forward_chan.all_gather_async(me, real_out, f"layer_{self.layer_id}_forward")
         send()
 
         return out, recv
@@ -444,9 +459,19 @@ class Transformer(nn.Module):
             partition_end = splits[rank][-1].item() + 1  # +1 because slicing is exclusive
             mask = mask[partition_start:partition_end, :]
 
+        # Gathered tensors will have different sizes if seqlen is not divisible by total
+        initial_size = h.size(1)
+        target_size = h.size(1) // world.chan("forward").size() + (1 if 0 < h.size(1) % total else 0)
         all_gather_recv = None
         for layer in self.layers:
-            h, all_gather_recv = layer(h, freqs_cis, mask, all_gather_recv=all_gather_recv)
+            h, all_gather_recv = layer(
+                h,
+                freqs_cis,
+                mask,
+                all_gather_recv=all_gather_recv,
+                initial_size=initial_size,
+                target_size=target_size,
+            )
 
         h = all_gather_recv() if all_gather_recv is not None else [h]
         h = torch.cat(h, dim=1)

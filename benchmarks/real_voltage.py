@@ -28,9 +28,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     batch_size = parsed_args.batch_size
     prompt = load_prompt("checkpoints/prompt_5000.txt")
 
-    text_lengths = [64, 128, 256]
-    speed = [10 * Mbps] # , 100 * Mbps, 1 * Gbps]
-    latency = [1 * ms] # , 5 * ms, 20 * ms]
+    text_lengths = [1024, 2048] # [64, 128, 256]
+    speed = [10 * Mbps, 100 * Mbps, 1 * Gbps]
+    latency = [1 * ms, 5 * ms, 20 * ms]
     repeats = 10
 
     world = setup_world(
@@ -67,8 +67,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
 
 
-        world.networks[0].bandwidth = 1/speed
-        world.networks[0].latency = latency
+        world.networks[0].network_params = [latency, 1/speed]
 
         client = True
         for device in world.devices:
