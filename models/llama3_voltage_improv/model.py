@@ -209,7 +209,7 @@ class Attention(nn.Module):
     def clean_cache(self):
         self.cache_known.zero_()
 
-    @profiled("Attention.calculate_xq", cuda=False)
+    # @profiled("Attention.calculate_xq", cuda=False)
     def calculate_xq(
         self,
         xp: torch.Tensor,
@@ -221,7 +221,7 @@ class Attention(nn.Module):
         xq = apply_rotary_emb(xq, freqs_cis=freqs_cis_xq)
         return xq
 
-    @profiled("Attention.calculate_keys", cuda=False)
+    # @profiled("Attention.calculate_keys", cuda=False)
     def calculate_keys(
         self,
         x: torch.Tensor,
@@ -233,7 +233,7 @@ class Attention(nn.Module):
         xk = apply_rotary_emb(xk, freqs_cis=freqs_cis_xk)
         return xk
 
-    @profiled("Attention.calculate_values", cuda=False)
+    # @profiled("Attention.calculate_values", cuda=False)
     def calculate_values(
         self,
         x: torch.Tensor,

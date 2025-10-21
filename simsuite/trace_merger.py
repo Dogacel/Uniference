@@ -171,7 +171,7 @@ def merge_traces(
     out = {"traceEvents": merged}
     pathlib.Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w") as f:
-        json.dump(out, f)
+        json.dump(out, f, indent=2)
 
 
 def group_by_prefix(file_list, delimiter="_run."):
