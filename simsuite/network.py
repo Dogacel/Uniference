@@ -117,6 +117,8 @@ class Network:
             return (self.internal_clock, None)
 
         def active_transmits(transmit: Transmit) -> int:
+            # If start_time == internal_clock, we consider it already started.
+            # TODO: Maybe max(1, outgoing from source, incoming to target).
             return len(
                 [
                     t
@@ -162,12 +164,14 @@ class Network:
         dprint("==============================")
 
         # Find the next transmit to complete.
+        # If start_time == internal_clock, we consider it already started.
         available_transmits = [t for t in self.transmits if not t.completed() and t.start_time <= self.internal_clock]
         first_to_end = min(available_transmits, key=end_time, default=None)
-        # Find the time when the next transmit will end assuming there will be no changes in bandwidth.
+        # Find the time when the next transmit will end optimistically assuming there will be no changes in bandwidth.
         first_end_time = end_time(first_to_end)
 
         # Find the time when the next transmit will start.
+        # If start_time == internal_clock, we consider it already started.
         first_start_time = min(
             (t.start_time for t in self.transmits if t.start_time > self.internal_clock), default=float("inf")
         )
@@ -190,7 +194,7 @@ class Network:
 
             for transmit in self.transmits:
                 # If the transmit hasn't started yet, skip it.
-                if transmit.start_time >= self.internal_clock + time_delta or transmit.completed():
+                if transmit.start_time > self.internal_clock or transmit.completed():
                     continue
                 transmit.transferred_so_far += true_bandwidth(transmit, time_delta)
                 transmit.internal_clock += time_delta
@@ -211,7 +215,7 @@ class Network:
 
             for transmit in self.transmits:
                 # If the transmit hasn't started yet, skip it.
-                if transmit.start_time > self.internal_clock + time_delta or transmit.completed():
+                if transmit.start_time > self.internal_clock or transmit.completed():
                     continue
 
                 # Simulate events happened between [internal_clock, max_time]
@@ -258,7 +262,7 @@ def duration_for(t0, S, active_transmits, alpha, beta):
         return 0
 
     # If time has already passed latency, we can use full bandwidth.
-    return max(0, alpha - t0) + S * beta / max(active_transmits, 1)
+    return max(0, alpha - t0) + S * (beta * max(active_transmits, 1))
 
 
 def bytes_transferred_in_window(t0, dt, active_transmits, alpha, beta):
@@ -271,4 +275,4 @@ def bytes_transferred_in_window(t0, dt, active_transmits, alpha, beta):
     # Make sure we only consider time outside of latency.
     non_latency_time = max(0, dt - max(0, alpha - t0))
 
-    return non_latency_time / (beta / max(active_transmits, 1))
+    return non_latency_time / (beta * max(active_transmits, 1))

@@ -36,7 +36,7 @@ def read_custom_events(path):
             and e["action"] in {"transmit_start", "transmit_end"}
         ):
             grouped[e.get("target_device")].append(e)
-            grouped[e.get("source_device")].append(e)
+            # grouped[e.get("source_device")].append(e)
 
     return grouped
 
@@ -134,12 +134,14 @@ def merge_traces(
         network_events = [e for e in custom_events if e.get("action") in {"transmit_start", "transmit_end"}]
         network_events_by_id = {}
         for e in network_events:
-            eid = e.get("internal_id")
+            mode = "send" if e["source_device"] == my_device else "receive"
+            eid = mode + str(e.get("internal_id"))
             if eid is not None:
                 if eid not in network_events_by_id:
                     network_events_by_id[eid] = {}
 
-                network_events_by_id[eid]["mode"] = "send" if e["source_device"] == my_device else "receive"
+                network_events_by_id[eid]["id"] = e["id"]
+                network_events_by_id[eid]["mode"] = mode
 
                 if e["action"] == "transmit_start":
                     network_events_by_id[eid]["transmit_start"] = e.get("time", 0)
@@ -149,10 +151,11 @@ def merge_traces(
                     network_events_by_id[eid]["transmit_end"] = e.get("time", 0)
 
         for eid, e in network_events_by_id.items():
+            print("Processing: ", e["id"])
             event = {
                 "ph": "X",
                 "cat": "user_annotation",
-                "name": "all_gather (" + e.get("mode", "unknown") + ")",
+                "name": e.get("id", "unknown") + " (" + e.get("mode", "unknown") + ")",
                 "pid": process_pid,
                 "tid": "network",
                 "ts": e.get("transmit_start", 0) * 1_000_000,  # assuming time is in seconds, convert to us

@@ -221,6 +221,16 @@ class World:
                 print(f"Device {device.name} is terminated after {state.clock} seconds")
                 continue
 
+            # Check if we are in a deadlock.
+            # Worst case, only a single device is runnable, so we won't do anything for len(devices)-1 checks.
+            if deadlock_checks > len(self.devices):
+                if all(d.state.dependency is not None for d in self.devices if not d.terminated):
+                    for d in self.devices:
+                        if not d.terminated and d.state.dependency is not None:
+                            dprint(f"Deadlock detected: device {d.name} is waiting on {d.state.dependency}")
+                    raise RuntimeError("Deadlock detected: all devices are waiting but no network activity")
+
+
             # Simulate network
 
             # A network simulation can only run up to the point where the next transmit completes
@@ -242,15 +252,9 @@ class World:
 
                 # No in-flight transmits
                 if t == -1:
-                    deadlock_checks += 1
-                    if deadlock_checks > len(self.devices) * 2:
-                        if all(d.state.dependency is not None for d in self.devices if not d.terminated):
-                            for d in self.devices:
-                                if not d.terminated and d.state.dependency is not None:
-                                    dprint(f"Deadlock detected: device {d.name} is waiting on {d.state.dependency}")
-                            raise RuntimeError("Deadlock detected: all devices are waiting but no network activity")
                     continue
 
+                # Reset deadlock counter
                 deadlock_checks = 0
                 # Move time forward if needed
                 self.max_time = max(self.max_time, t)
@@ -271,6 +275,8 @@ class World:
 
             # Device is runnable if no network dependency exists or the dependency is completed.
             if state.dependency is None or dependency_completed:
+                # Reset deadlock counter
+                deadlock_checks = 0
                 self.event_logger.log_event({"device": device.name, "action": "running", "time": state.clock})
 
                 state.last_run_time = perf_counter()
@@ -295,6 +301,7 @@ class World:
 
                 self.max_time = max(self.max_time, state.clock)
             else:
+                deadlock_checks += 1
                 dprint(f"Device {device.name} yielding on dependency {state.dependency}")
 
             if not g.dead:

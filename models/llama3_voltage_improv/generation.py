@@ -303,7 +303,7 @@ class Llama3:
             if all(eos_reached):
                 break
 
-        world.chan("pre_processed_input").broadcast(me, None, "tokens", force_send=True)
+        world.chan("pre_processed_input").broadcast(me, None, "tokens", force_send=True, source=0)
 
     def completion(
         self,

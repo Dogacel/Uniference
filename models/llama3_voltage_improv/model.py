@@ -359,7 +359,7 @@ class TransformerBlock(nn.Module):
             # Remove padding if added
             new_x = []
             for i, elem in enumerate(real_x):
-                if initial_size % total != 0 and i < initial_size % total:
+                if initial_size % total != 0 and i >= initial_size % total:
                     elem = elem[:, :-1, :]
                 new_x.append(elem)
             x = torch.cat(new_x, dim=1)
