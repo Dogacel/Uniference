@@ -1,46 +1,35 @@
+import fire
 import itertools
-import sys
 import torch
-
-from typing import Optional, Sequence
 
 from commons import load_prompt, get_prompt_sequence_first_n, setup_world
 from programs.voltage_program import VoltageProgram
-from models.datatypes import RawMessage
-import argparse
 
 from simsuite.units import Gbps, Mbps, ms
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = argv[1:] if argv else sys.argv[1:]
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("output_file", nargs="?", default="run_report.json", help="Output file name")
-    parser.add_argument("--device_count", type=int, default=1, help="Number of devices")
-    parser.add_argument("--batch_size", type=int, default=1, help="Batch size for generation")
-    parser.add_argument("--model_type", type=str, default="voltage", help="Type of voltage model to use")
-    parser.add_argument("--debug_run", action="store_true", help="Enable debug run mode")
-    parsed_args = parser.parse_args(args)
-
-    device_count = parsed_args.device_count
-    output_file = "results/" + parsed_args.output_file
-    batch_size = parsed_args.batch_size
-    prompt = load_prompt("checkpoints/prompt_5000.txt")
-
-    text_lengths = [128, 256, 512, 1024]
-    speed = [10 * Mbps, 100 * Mbps, 1 * Gbps]
-    latency = [1 * ms, 5 * ms, 20 * ms]
-    repeats = 10
+def main(
+    output_file: str = "results/run_report.json",
+    prompt_file: str = "checkpoints/prompt_5000.txt",
+    text_lengths: list[int] = [128, 256, 512, 1024],
+    speed: list[float] = [10 * Mbps, 100 * Mbps, 1 * Gbps],
+    latency: list[float] = [1 * ms, 5 * ms, 20 * ms],
+    repeats: int = 10,
+    max_seq_len: int = 8192,
+    device_count: int = 1,
+    model_type: str = "voltage",
+    debug_run: bool = False,
+) -> int:
+    prompt = load_prompt(prompt_file)
 
     world = setup_world(
         device_count=device_count,
-        seq_len=8192,
+        seq_len=max_seq_len,
         output_file=output_file,
         program=lambda **kwargs: VoltageProgram(**kwargs),
-        batch_size=batch_size,
-        program_kwargs={"model_type": parsed_args.model_type},
-        world_kwargs={"debug_run": parsed_args.debug_run},
+        batch_size=1,
+        program_kwargs={"model_type": model_type},
+        world_kwargs={"debug_run": debug_run},
     )
 
     # Generate Cartesian product
@@ -51,7 +40,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     for combo in combinations:
         sequence_length, speed, latency, repeat_idx = combo
 
-        print(f"Sequence length: {sequence_length}, tokens, speed: {speed}, latency: {latency}, Repeat index: {repeat_idx}")
+        print(
+            f"Sequence length: {sequence_length}, tokens, speed: {speed}, latency: {latency}, Repeat index: {repeat_idx}"
+        )
 
         sub_prompt = get_prompt_sequence_first_n(prompt, sequence_length)
         world.set_runtime_params(
@@ -66,13 +57,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             }
         )
 
-
-        world.networks[0].network_params = [latency, 1/speed]
+        world.networks[0].network_params = [latency, 1 / speed]
 
         client = True
         for device in world.devices:
             device.client = client
-            device.spec.speed_scale = 1.30951488 # Adjust speed scale for Voltage devices
+            device.spec.speed_scale = 1.30951488  # Adjust speed scale for Voltage devices
             if world.backend == "pytorch":
                 device.client = torch.distributed.get_rank() == 0
                 client = device.client
@@ -91,4 +81,4 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    fire.Fire(main)
