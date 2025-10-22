@@ -37,6 +37,14 @@ sanity_cuda:
 		--max_tokens=10 \
 		--yield_probability=1.0
 
+sanity_mps:
+	DEVICE=mps ./run.sh scenarios.yield_perf_scenario \
+		--device_count=1 \
+		--prompt="${PROMPT_100}" \
+		--max_seq_len=512 \
+		--max_tokens=10 \
+		--yield_probability=1.0
+
 sanity_voltage:
 	DEVICE=cpu ./run.sh scenarios.voltage_scenario \
 		--device_count=1 \

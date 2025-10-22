@@ -28,10 +28,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     batch_size = parsed_args.batch_size
     prompt = load_prompt("checkpoints/prompt_5000.txt")
 
-    text_lengths = [512] # , 1024] # , 2048] # [64, 128, 256]
-    speed = [1 * Gbps] # [10 * Mbps, 100 * Mbps, 1 * Gbps]
-    latency = [1 * ms] # [1 * ms, 5 * ms, 20 * ms]
-    repeats = 1
+    text_lengths = [128, 256, 512, 1024]
+    speed = [10 * Mbps, 100 * Mbps, 1 * Gbps]
+    latency = [1 * ms, 5 * ms, 20 * ms]
+    repeats = 10
 
     world = setup_world(
         device_count=device_count,
@@ -72,6 +72,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         client = True
         for device in world.devices:
             device.client = client
+            device.spec.speed_scale = 1.30951488 # Adjust speed scale for Voltage devices
             if world.backend == "pytorch":
                 device.client = torch.distributed.get_rank() == 0
                 client = device.client

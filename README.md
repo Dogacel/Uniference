@@ -4,7 +4,20 @@ Simulation suite for running transformer models on edge devices in distributed s
 
 ![Simulation Suite Overview](https://i.imgur.com/MVGREdV.png)
 
+## Additional Resources
+
+- [Jetson Setup](docs/jetson_setup.md)
+- [Modifying Network Conditions](docs/modifying_network_conditions.md)
+
 ## Quickstart
+
+You need `uv` to run the models.
+
+```shell
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+uv sync --all-extras
+```
 
 We recommend running _Llama 3_ models. To get started, download the LLama model weights into checkpoints directory.
 
@@ -17,25 +30,25 @@ uvx --from huggingface_hub huggingface-cli download meta-llama/Llama-3.2-1B-Inst
 
 ```
 
-A pre-determined set of scenarios and programs are listed under `scenarios` folder. You can use the `run.sh` helper script to run a scenario to get started.
+You can use the `Makefile` to make a sanity run.
 
 ```shell
-
-uv sync --extra torch --extra analysis
-./run.sh models.llama3.scripts.failover_simple_scenario
-
+make sanity # CPU only
+make sanity_cuda # If you have a CUDA device
+make sanity_mps # If you have an MPS device
 ```
 
 ## Codebase
 
 This project is initially forked from [llama-models](https://github.com/meta-llama/llama-models/). Therefore inherits some utilities and folders from the upstream llama project.
 
-- **event-visualization**: A web page for replaying a recorded simulation.
 - **models**: Keeps transformer models that are run in simulations.
   - Files `checkpoint.py`, `datatypes.py`, `quantize_impls.py` and `tokenizer_utils.py` are taken from the upstream `llama-models` repository. They are common dependencies used by different llama models.
   - Currently Llama models are preferred to be modified for distributed settings, however there is no limitation on the type of models can be used.
 - **programs**: Stores programs, that can be loaded into devices to be run by them. Each program should use some `models`.
-- **scenarios**: Contains scenarios, which aim to imitate the real-life like scenarios for testing the model performance. Scenarios should use some `programs`.
+- **benchmarks**: Consists programs to run benchmarks of certain algorithms such as `TP` or `Voltage`.
+- **notebooks**: Consists Jupyter notebooks that are used to evaluate algorithms or the simulation software itself throughout its development.
+- **scenarios**: (DEPRECATED), consists some basic scenarios for testing distributed algorithms.
 - **simsuite**: Source code for the simulation software that is used to emulate a multi-device real-life like scenario.
 
 ## Adding new models
@@ -52,156 +65,140 @@ In order to run your model on a device, you should write a wrapper program aroun
 
 To get started, inspect the `ping_pong_program`. This program waits until all devices have generated a token until it proceeds to generate the next token.
 
-## Creating new scenarios
+## Creating new benchmarks
 
-Here are some key elements while creating scenarios, which describe the world where each device exists, their capabilities and how they connect to each other.
+TODO: Take a look at ... for example.
 
-- **World**: Describes a simulation world, where devices live in.
-- **Device**: TODO 
-- **Chan**: TODO
+## Deployment
 
-## Running simulations
-
-Currently only way to run a simulation is to run it on your local device. You can do this by using the `./run.sh` utility.
-
-```shell
-./run.sh scenarios.synchronize_scenario --device_count=2 --prompt="Don't say anything else, just count from 1 to 10."
-```
-
-## Experiment Setup
-
-### Jetson Nano Orin DevKit
-
-Use the following commands to setup the benchmark.
-
-```shell
-sudo hostname orin-X
-
-curl -fsSL https://tailscale.com/install.sh | sh
-sudo vim /etc/sysctl.conf
-#net.ipv4.ip_forward=1
-#net.ipv6.conf.all.forwarding=1
-sudo sysctl -p
-sudo tailscale up --advertise-routes=192.168.1.0/24 --advertise-exit-node
-
-git config --global credential.helper store
-git clone https://github.com/Dogacel/edge-llm-benchmark.git
-# Use generated read-only API token
-
-cd edge-llm-benchmark
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source $HOME/.local/bin/env
-
-uv sync --all-extras
-
-uvx --from huggingface_hub huggingface-cli download meta-llama/Llama-3.2-1B-Instruct \
-  --include "original/*" \
-  --local-dir checkpoints/Llama-3.2-1B-Instruct
-
-make sanity
-```
-
-For CUDA support,
-
-```shell
-export DEVICE=cuda
-
-sudo apt install nvidia-jetpack
-
-export CUDA_VERSION=12.6
-
-wget https://raw.githubusercontent.com/pytorch/pytorch/a11a66ef320938cd0fd72b44b2b572b06937e100/.ci/docker/common/install_cusparselt.sh
-sudo -E bash ./install_cusparselt.sh
-
-# Trick to make cudss installation work
-export CUDA_VERSION=12.4
-wget -qO install_cudss.sh https://raw.githubusercontent.com/pytorch/pytorch/main/.ci/docker/common/install_cudss.sh
-sudo -E bash ./install_cudss.sh
-
-# Modify pyproject.toml to replace torch constraint with this,
-# "torch @ https://pypi.jetson-ai-lab.io/jp6/cu126/+f/590/92ab729aee2b8/torch-2.8.0-cp310-cp310-linux_aarch64.whl#sha256=59092ab729aee2b8937d80cc1b35d1128275bd02a7e1bc911e7efa375bd97226",
-```
-
-#### Tensor Parallelism
-
-To run tensor parallel example on multiple devices, run the following for each device.
-
-Leader device,
+You can directly deploy the models on devices by setting a few environment variables. First you need the ip address of the leader and it should be accessible from the followers.
 
 ```shell
 # Note the local ip of the leader, usually in form 192.168.x.x or 10.0.0.x
 ip -4 addr show scope global | grep inet
-
-export MASTER_ADDR=192.168.1.14
-export MASTER_PORT=25001
-export GLOO_SOCKET_IFNAME=enP8p1s0
-
-# Set simulation backend to pytorch
-export WORLD_BACKEND=pytorch
-
-export RANK=0
-
-# Update world size if needed
-export WORLD_SIZE=2
-
-# Jetson Nano doesn't work with nccl
-export DIST_BACKEND=gloo
 ```
 
-Follower devices,
+Later, save this value and set the following variables for each device, including the leader.
 
 ```shell
-# Replace master addr with the result found above.
 export MASTER_ADDR=192.168.1.14
 export MASTER_PORT=25001
+# Use the ifsocket you use to connect devices to each other.
 export GLOO_SOCKET_IFNAME=enP8p1s0
-
 # Set simulation backend to pytorch
 export WORLD_BACKEND=pytorch
+```
 
-# Update rank for each device
-export RANK=1
+Based on your deployment size, you should set the world_size and rank. Make sure each device has a distinct rank.
 
-# Update world size if needed
+```shell
 export WORLD_SIZE=2
+export RANK=0
+```
 
-# Jetson Nano doesn't work with nccl
+Later, you will pick-up a pytorch.distributed backend. It can take three values: `nccl`, `gloo` and `mpi`. For most deployments, we recommend using `gloo`. Only HPC clusters with inifiniband connection and proper NVIDIA drivers support `nccl`.
+
+```shell
 export DIST_BACKEND=gloo
 ```
 
-## Network Simulation
+## Conducting Experiments
 
-Run the following command in both networks to learn about the network parameters.
+This section explains how to experiment different algorithms with the simulation software,
+
+### Measuring Network Parameters 
+
+To accurately model our world, we need to run some benchmarks to figure out our Network parameters. Run the following command in all devices to learn about the current network's parameters.
 
 ```shell
 uv run benchmarks/network.py --mode=all_gather
 ```
 
-### Injecting Latency and Limiting Bandwidth
+For proper evaluation of your network conditions, you can use the `all_gather` Notebook under `notebooks` folder.
 
-*WIP:* Toxiproxy doesn't work with GLOO backend because it only uses 25001 for randezvous.
+### Adjusting the World Parameters
+
+You can create the network with two parameters, _latency_ and _bandwidth_. 
+
+```python
+world.network(
+    NetworkArgs(
+        devices=devices,
+        network_params=[latency, 1/bandwidth],
+    )
+)
+```
+
+If you need to modify network in-between the experiments, you can directly access the `world.networks` object.
+
+```python
+world.networks[0].network_params = [new_latency, 1/new_bandwidth]
+```
+
+### Creating a "Parameter Search Grid Space"
+
+You might want to test your algorithm with different inputs, device speeds, network conditions etc. To do that, create a parameter grid:
+
+```python
+text_lengths = [128, 256, 512, 1024]
+speed = [10 * Mbps, 100 * Mbps, 1 * Gbps]
+latency = [1 * ms, 5 * ms, 20 * ms]
+repeats = 100
+
+# Make sure world is created only once
+world = setup_world(...)
+
+# Generate Cartesian product
+combinations = list(itertools.product(text_lengths, speed, latency, range(repeats)))
+
+for combo in combinations:
+    sequence_length, speed, latency, repeat_idx = combo
+
+    # Update world
+    world.networks[0].network_params = [latency, 1/speed]
+
+    world.run()
+```
+
+You can also access world devices and speed them up or slow them down.
+
+```python
+for device in world.devices:
+    device.spec.speed_scale = 1.3
+```
+
+### Running experiments
+
+To run experiments of multiple devices on a single device, 
 
 ```shell
-wget https://github.com/Shopify/toxiproxy/releases/download/v2.7.0/toxiproxy-server-linux-arm64 -O toxiproxy-server
-wget https://github.com/Shopify/toxiproxy/releases/download/v2.7.0/toxiproxy-cli-linux-arm64 -O toxiproxy-cli
-chmod +x toxiproxy-server toxiproxy-cli
+export MASTER_ADDR=localhost
+export MASTER_PORT=25001
+export WORLD_SIZE=1
+export RANK=0
 
-# On a separate session
-./toxiproxy-server
+export DEVICE=mps # Change it to cpu/cuda based on your hardware
+uv run python benchmarks/real_tp.py --device_count=4
+```
 
-./toxiproxy-cli create -l 0.0.0.0:5000 -u 192.168.1.14:25001 mylink
+### Debugging and Tracing
 
-./toxiproxy-cli toxic add -t latency -a latency=10 -u mylink
-./toxiproxy-cli toxic add -t latency -a latency=10 -d mylink
-./toxiproxy-cli toxic add -t bandwidth -a rate=12500 -u mylink
-./toxiproxy-cli toxic add -t bandwidth -a rate=12500 -d mylink
+During those runs, you can enable the debug mode `--debug_run` to enable PyTorch profiler to collect traces. Later you can use the provided trace merger tool to generate a single chrome trace and load it with [Perfetto](https://perfetto.dev/).
 
-# On server
-iperf3 -s -p 25001
+![Trace](https://i.imgur.com/jA7Pqus.png)
 
-# On client
-iperf3 -c localhost -p 5000 -t 30
+```shell
+uv run simsuite/trace_merger.py results/trace_voltage_improv_4.json --event_log_file=event_log_1761062693.474991.jsonl
+```
 
-sudo apt install hping3
-sudo hping3 -S -p 5000 -c 5 127.0.0.1
+### Collecting results
+
+The run timing results will be collected under `./results/run_report.json`. You can take a look at some example notebooks to figure out how to interpret those results.
+
+## Running non-Llama models
+
+Simulator is also capable of running other models than Llama, such as CLIP.
+
+```shell
+uv run python -m scenarios.clip_perf_scenario  --device_count=1 --backend="simulation"
 ```
