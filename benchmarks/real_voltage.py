@@ -44,7 +44,7 @@ def main(
             f"Sequence length: {sequence_length}, tokens, speed: {speed}, latency: {latency}, Repeat index: {repeat_idx}"
         )
 
-        sub_prompt = prompt[sequence_length] # get_prompt_sequence_first_n(prompt, sequence_length)
+        sub_prompt = prompt[:sequence_length] # get_prompt_sequence_first_n(prompt, sequence_length)
         world.set_runtime_params(
             world.runtime_params
             | {
