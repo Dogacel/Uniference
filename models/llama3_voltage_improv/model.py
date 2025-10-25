@@ -218,7 +218,7 @@ class Attention(nn.Module):
         bsz_p, seqlen_p, _ = xp.shape
         xq = self.wq(xp)
         xq = xq.view(bsz_p, seqlen_p, self.n_local_heads, self.head_dim)
-        xq = apply_rotary_emb(xq, freqs_cis=freqs_cis_xq)
+        # xq = apply_rotary_emb(xq, freqs_cis=freqs_cis_xq)
         return xq
 
     # @profiled("Attention.calculate_keys", cuda=False)
@@ -250,6 +250,7 @@ class Attention(nn.Module):
         keys: torch.Tensor,
         values: torch.Tensor,
         freqs_cis: torch.Tensor,
+        freqs_cis_xq: torch.Tensor,
         mask: Optional[torch.Tensor],
         mode: Literal["attention", "xq", "keys", "values"] = "attention",
     ):
@@ -260,9 +261,18 @@ class Attention(nn.Module):
         elif mode == "values":
             return self.calculate_values(x)
 
+        bsz, seqlen, _ = x.shape
+        xk, xv = self.wk(x), self.wv(x)
+
+        xk = xk.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
+        xv = xv.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
+
+        xq = apply_rotary_emb(xq, freqs_cis=freqs_cis_xq)
+        xk = apply_rotary_emb(xk, freqs_cis=freqs_cis)
+
         # repeat k/v heads if n_kv_heads < n_heads
-        keys = repeat_kv(keys, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
-        values = repeat_kv(values, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
+        keys = repeat_kv(xk, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
+        values = repeat_kv(xv, self.n_rep)  # (bs, cache_len + seqlen, n_local_heads, head_dim)
 
         bsz_xq, seqlen_xq, _, _ = xq.shape
 
@@ -333,6 +343,7 @@ class TransformerBlock(nn.Module):
         self,
         x: torch.Tensor,
         freqs_cis: torch.Tensor,
+        freqs_cis_xq: torch.Tensor,
         mask: Optional[torch.Tensor],
         all_gather_recv: Optional[Any],
         initial_size: int,
@@ -350,11 +361,10 @@ class TransformerBlock(nn.Module):
             xp = x
 
         # with torch.profiler.record_function(f"xq"):
-        start = perf_counter()
+        # start = perf_counter()
         xp_norm = self.attention_norm(xp)
-        freqs_cis_xq = torch.tensor_split(freqs_cis, total, dim=0)[rank]
-        xq = self.attention(xp_norm, None, None, None, freqs_cis_xq, None, mode="xq")
-        end = perf_counter()
+        xq = self.attention(xp_norm, None, None, None, None, None, None, mode="xq")
+        # end = perf_counter()
         # print(f"Layer {self.layer_id} xq time: {(end - start)*1000:.3f} milliseconds")
 
         if all_gather_recv is not None:
@@ -369,11 +379,11 @@ class TransformerBlock(nn.Module):
 
         x_norm = self.attention_norm(x)
 
-        keys = self.attention(x_norm, None, None, None, freqs_cis, None, mode="keys")
-        values = self.attention(x_norm, None, None, None, freqs_cis, None, mode="values")
+        # keys = self.attention(x_norm, None, None, None, freqs_cis, None, mode="keys")
+        # values = self.attention(x_norm, None, None, None, freqs_cis, None, mode="values")
 
         # with torch.profiler.record_function(f"xp + attention"):
-        h = xp + self.attention(x_norm, xq, keys, values, freqs_cis, mask, mode="attention")
+        h = xp + self.attention(x_norm, xq, None, None, freqs_cis, freqs_cis_xq, mask, mode="attention")
 
         # with torch.profiler.record_function(f"ffn"):
         out = h + self.feed_forward(self.ffn_norm(h))
@@ -466,17 +476,19 @@ class Transformer(nn.Module):
         initial_size = h.size(1)
         target_size = h.size(1) // world.chan("forward").size() + (1 if 0 < h.size(1) % total else 0)
         all_gather_recv = None
+        freqs_cis_xq = torch.tensor_split(freqs_cis, total, dim=0)[rank]
         for layer in self.layers:
-            start = perf_counter()
+            # start = perf_counter()
             h, all_gather_recv = layer(
                 h,
                 freqs_cis,
+                freqs_cis_xq,
                 mask,
                 all_gather_recv=all_gather_recv,
                 initial_size=initial_size,
                 target_size=target_size,
             )
-            end = perf_counter()
+            # end = perf_counter()
             # print(f"Layer {layer.layer_id} forward time: {(end - start)*1000:.3f} milliseconds")
 
         h = all_gather_recv() if all_gather_recv is not None else [h]
