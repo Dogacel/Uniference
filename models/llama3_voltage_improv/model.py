@@ -270,8 +270,8 @@ class Attention(nn.Module):
         keys = keys.transpose(1, 2).type_as(values)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
         values = values.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
 
-        with torch.profiler.record_function(f"attention scores"):
-            scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
+        # with torch.profiler.record_function(f"attention scores"):
+        scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
 
         if mask is not None:
             scores = scores + mask  # (bs, n_local_heads, seqlen_p, cache_len + seqlen)
@@ -349,10 +349,13 @@ class TransformerBlock(nn.Module):
         else:
             xp = x
 
-        with torch.profiler.record_function(f"xq"):
-            xp_norm = self.attention_norm(xp)
-            freqs_cis_xq = torch.tensor_split(freqs_cis, total, dim=0)[rank]
-            xq = self.attention(xp_norm, None, None, None, freqs_cis_xq, None, mode="xq")
+        # with torch.profiler.record_function(f"xq"):
+        start = perf_counter()
+        xp_norm = self.attention_norm(xp)
+        freqs_cis_xq = torch.tensor_split(freqs_cis, total, dim=0)[rank]
+        xq = self.attention(xp_norm, None, None, None, freqs_cis_xq, None, mode="xq")
+        end = perf_counter()
+        print(f"Layer {self.layer_id} xq time: {(end - start)*1000:.3f} milliseconds")
 
         if all_gather_recv is not None:
             real_x = all_gather_recv()
@@ -369,11 +372,11 @@ class TransformerBlock(nn.Module):
         keys = self.attention(x_norm, None, None, None, freqs_cis, None, mode="keys")
         values = self.attention(x_norm, None, None, None, freqs_cis, None, mode="values")
 
-        with torch.profiler.record_function(f"xp + attention"):
-            h = xp + self.attention(x_norm, xq, keys, values, freqs_cis, mask, mode="attention")
+        # with torch.profiler.record_function(f"xp + attention"):
+        h = xp + self.attention(x_norm, xq, keys, values, freqs_cis, mask, mode="attention")
 
-        with torch.profiler.record_function(f"ffn"):
-            out = h + self.feed_forward(self.ffn_norm(h))
+        # with torch.profiler.record_function(f"ffn"):
+        out = h + self.feed_forward(self.ffn_norm(h))
 
         # All gather expects all tensors to have the same size, so pad if necessary
         if out.size(1) < target_size:

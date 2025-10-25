@@ -62,7 +62,7 @@ def main(
         client = True
         for device in world.devices:
             device.client = client
-            device.spec.speed_scale = 1.30951488  # Adjust speed scale for Voltage devices
+            # device.spec.speed_scale = 1.30951488  # Adjust speed scale for Voltage devices
             if world.backend == "pytorch":
                 device.client = torch.distributed.get_rank() == 0
                 client = device.client
