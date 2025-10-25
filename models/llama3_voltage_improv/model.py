@@ -467,6 +467,7 @@ class Transformer(nn.Module):
         target_size = h.size(1) // world.chan("forward").size() + (1 if 0 < h.size(1) % total else 0)
         all_gather_recv = None
         for layer in self.layers:
+            start = perf_counter()
             h, all_gather_recv = layer(
                 h,
                 freqs_cis,
@@ -475,6 +476,8 @@ class Transformer(nn.Module):
                 initial_size=initial_size,
                 target_size=target_size,
             )
+            end = perf_counter()
+            print(f"Layer {layer.layer_id} forward time: {(end - start)*1000:.3f} milliseconds")
 
         h = all_gather_recv() if all_gather_recv is not None else [h]
         h = torch.cat(h, dim=1)
