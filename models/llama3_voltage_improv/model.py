@@ -355,7 +355,7 @@ class TransformerBlock(nn.Module):
         freqs_cis_xq = torch.tensor_split(freqs_cis, total, dim=0)[rank]
         xq = self.attention(xp_norm, None, None, None, freqs_cis_xq, None, mode="xq")
         end = perf_counter()
-        print(f"Layer {self.layer_id} xq time: {(end - start)*1000:.3f} milliseconds")
+        # print(f"Layer {self.layer_id} xq time: {(end - start)*1000:.3f} milliseconds")
 
         if all_gather_recv is not None:
             real_x = all_gather_recv()
@@ -477,7 +477,7 @@ class Transformer(nn.Module):
                 target_size=target_size,
             )
             end = perf_counter()
-            print(f"Layer {layer.layer_id} forward time: {(end - start)*1000:.3f} milliseconds")
+            # print(f"Layer {layer.layer_id} forward time: {(end - start)*1000:.3f} milliseconds")
 
         h = all_gather_recv() if all_gather_recv is not None else [h]
         h = torch.cat(h, dim=1)
