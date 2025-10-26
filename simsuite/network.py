@@ -146,6 +146,9 @@ class Network:
             if not transmit:
                 return float("inf")
 
+            if transmit.size == transmit.transferred_so_far:
+                return self.internal_clock + 0.00000000000001
+
             duration_for_transmit = duration_for(
                 transmit.internal_clock,
                 (transmit.size - transmit.transferred_so_far) / 8,
@@ -165,8 +168,25 @@ class Network:
 
         # Find the next transmit to complete.
         # If start_time == internal_clock, we consider it already started.
-        available_transmits = [t for t in self.transmits if not t.completed() and t.start_time <= self.internal_clock]
+        # Don't filter out entities that are .completed(), because they need to be picked up by the device
+        # and removed from the network. As the same device can schedule new transmits, moving time forward
+        # would cause device to send messages from the past that arrive to the future, thus having longer
+        # than expected durations.
+        available_transmits = [
+            t
+            for t in self.transmits
+            # This line behaves weird for async_ops, so change != to == while running async benchmark
+            if t.start_time <= self.internal_clock and ((not t.completed()) or t.target_device.state.dependency != t)
+        ]
         first_to_end = min(available_transmits, key=end_time, default=None)
+
+        if first_to_end is not None and first_to_end.completed():
+            # All available transmits are already completed, we should wait until the device picks it up.
+            dprint(
+                f"Device {first_to_end.target_device.name} transmit {first_to_end.id} already completed, waiting for device to pick it up."
+            )
+            return (-1, None)
+
         # Find the time when the next transmit will end optimistically assuming there will be no changes in bandwidth.
         first_end_time = end_time(first_to_end)
 
@@ -196,7 +216,10 @@ class Network:
                 # If the transmit hasn't started yet, skip it.
                 if transmit.start_time > self.internal_clock or transmit.completed():
                     continue
-                transmit.transferred_so_far += true_bandwidth(transmit, time_delta)
+                transmit.transferred_so_far = min(
+                    transmit.transferred_so_far + true_bandwidth(transmit, time_delta),
+                    transmit.size,
+                )
                 transmit.internal_clock += time_delta
 
                 if transmit.transferred_so_far > transmit.size + 1:
@@ -219,7 +242,9 @@ class Network:
                     continue
 
                 # Simulate events happened between [internal_clock, max_time]
-                transmit.transferred_so_far += true_bandwidth(transmit, time_delta)
+                transmit.transferred_so_far = min(
+                    transmit.transferred_so_far + true_bandwidth(transmit, time_delta), transmit.size
+                )
                 transmit.internal_clock += time_delta
 
                 if transmit.transferred_so_far > transmit.size + 1:

@@ -223,7 +223,7 @@ class World:
 
             # Check if we are in a deadlock.
             # Worst case, only a single device is runnable, so we won't do anything for len(devices)-1 checks.
-            if deadlock_checks > len(self.devices):
+            if deadlock_checks > len(self.devices) + sum([len(x.transmits) for x in self.networks]):
                 if all(d.state.dependency is not None for d in self.devices if not d.terminated):
                     for d in self.devices:
                         if not d.terminated and d.state.dependency is not None:
@@ -271,6 +271,10 @@ class World:
 
             dependency_completed = hasattr(state.dependency, "completed") and state.dependency.completed()
             if dependency_completed:
+                dprint(f"Device {device.name} dependency completed: {state.dependency}")
+                millis_took = (state.dependency.end_time - state.clock) * 1000
+                if millis_took > 100:
+                    breakpoint()
                 state.clock = max(state.clock, state.dependency.end_time)
 
             # Device is runnable if no network dependency exists or the dependency is completed.

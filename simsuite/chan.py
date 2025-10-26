@@ -66,23 +66,25 @@ class Chan:
 
         items = [None for _ in range(len(self.subscribers))]
         items[my_order] = my_share
+        new_share = my_share
 
         for i in range(rounds):
-            sender_id = (my_order - i - 1) % len(self.subscribers)
-            receiver_id = (my_order + i + 1) % len(self.subscribers)
+            sender_id = (my_order - 1) % len(self.subscribers)
+            receiver_id = (my_order + 1) % len(self.subscribers)
 
             receiver = self.subscribers[receiver_id]
             sender = self.subscribers[sender_id]
 
             self.send(
                 me,
-                my_share,
+                new_share,
                 f"all_gather_{id}_{me.name}_{receiver.name}_{i}",
                 target=self.subscribers[receiver_id],
             )
             new_share = self.receive(me, f"all_gather_{id}_{sender.name}_{me.name}_{i}")
 
-            items[sender_id] = new_share.to(my_share.device)
+            round = (my_order - i - 1) % len(self.subscribers)
+            items[round] = new_share.to(my_share.device)
 
         return items
 
@@ -93,21 +95,30 @@ class Chan:
         def send():
             for i in range(rounds):
                 receiver_id = (my_order + i + 1) % len(self.subscribers)
+                print(my_order, "Sending to ", receiver_id)
                 receiver = self.subscribers[receiver_id]
+
+                # We should emulate sending N rounds, therefore we add delay based on round number
+                time = me.state.sync_clock() + i * me.world.networks[0].network_params[0]
 
                 self.send(
                     me,
                     my_share,
                     f"all_gather_{id}_{me.name}_{receiver.name}_{i}",
                     target=self.subscribers[receiver_id],
+                    force_time=time,
+                    no_yield=True,
                 )
+
+            self.world.xyield(me, f"chan {self.name} send()")
 
         def receive():
             items = [None for _ in range(len(self.subscribers))]
             items[my_order] = my_share
 
             for i in range(rounds):
-                sender_id = (my_order - i - 1) % len(self.subscribers)
+                sender_id = (my_order - (i + 1)) % len(self.subscribers)
+                print(my_order, "Receiving from ", sender_id)
                 sender = self.subscribers[sender_id]
 
                 new_share = self.receive(me, f"all_gather_{id}_{sender.name}_{me.name}_{i}")
@@ -170,7 +181,7 @@ class Chan:
         result = torch.cat(gathered, axis=-1)
         return result
 
-    def send(self, me: Device, data: Any, transmit_id: str, target: Device, force_time: Optional[float] = None):
+    def send(self, me: Device, data: Any, transmit_id: str, target: Device, force_time: Optional[float] = None, no_yield: bool = False):
         # TODO: Currently single network is supported
         network = me.world.networks[0]
 
@@ -191,7 +202,8 @@ class Chan:
 
         dprint(f"[{me.state.clock}] Chan {self.name} send() size={size} time={time} id={transmit_id}")
         network.transmit(data, size=size, world_time=time, id=transmit_id, source=me, target=target)
-        self.world.xyield(me, f"chan {self.name} send()")
+        if not no_yield:
+            self.world.xyield(me, f"chan {self.name} send()")
 
     def receive(self, me: Device, transmit_id: str) -> Any:
         # TODO: Currently single network is supported
