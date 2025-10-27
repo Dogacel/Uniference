@@ -11,12 +11,13 @@ from greenlet import greenlet
 from torch.distributed import destroy_process_group
 
 from simsuite.chan import Chan
-from simsuite.device import Device, DeviceArgs, DeviceState
+from simsuite.device import Device, DeviceArgs, DeviceState, RemoteDevice, DeviceSpec
 from simsuite.event_logger import WorldEventLogger
 from simsuite.network import Network, NetworkArgs
 from simsuite.profiler import TorchProfiler
 from simsuite.common import dprint
 from simsuite.pytorch_chan import PytorchChan
+from simsuite.server import BackgroundServer
 
 
 class PreparedEvent:
@@ -87,25 +88,20 @@ class World:
 
         print("Using backend:", self.backend)
 
-        if self.backend == "remote":
-            mode = kwargs.get("remote_mode", os.getenv("REMOTE_MODE", "server"))
-            if mode not in ["server", "client"]:
-                raise ValueError("REMOTE_MODE must be 'server' or 'client'")
-            self.remote_mode = mode
-            self.remote_host = kwargs.get("remote_host", os.getenv("REMOTE_HOST", "0.0.0.0"))
-            self.remote_port = int(kwargs.get("remote_port", os.getenv("REMOTE_PORT", "25002")))
-
-            print(f"Remote mode: {self.remote_mode}, host: {self.remote_host}, port: {self.remote_port}")
-
-            if self.remote_mode == "server":
-                from simsuite.server import StatefulServer
-                self.server = StatefulServer(host=self.remote_host, port=self.remote_port)
-            else:
-                from simsuite.client import StatefulClient
-                self.client = StatefulClient(server_host=self.remote_host, server_port=self.remote_port)
 
     def device(self, deviceArgs: DeviceArgs, program: Program):
         device = Device(deviceArgs, program, self)
+        self.devices.append(device)
+        self.device_states[device] = DeviceState(device)
+        device.state = self.device_states[device]
+
+        self.event_logger.log_event({"device": device.name, "action": "created"})
+        return device
+
+    def remote_device(self, loop, reader, writer):
+        device = RemoteDevice(
+            DeviceArgs(spec=DeviceSpec(), client=True, name="remote_device"), self, loop, reader, writer
+        )
         self.devices.append(device)
         self.device_states[device] = DeviceState(device)
         device.state = self.device_states[device]
@@ -141,7 +137,7 @@ class World:
             if chan.name == tag:
                 return chan
         if self.backend == "pytorch":
-            new_chan = PytorchChan(tag, self)   
+            new_chan = PytorchChan(tag, self)
         else:
             new_chan = Chan(tag, self)
         self.chans.append(new_chan)
@@ -195,6 +191,8 @@ class World:
 
         for device in self.devices:
             device.initialize()
+            if device.remote:
+                device.run(warmup=warmup)
             self._runq.append(
                 (
                     device,
@@ -217,6 +215,8 @@ class World:
             device, g = self._runq.pop(0)
             state = self.device_states[device]
 
+            print("Simulating device:", device.name, "at time", state.clock)
+
             if device.terminated:
                 print(f"Device {device.name} is terminated after {state.clock} seconds")
                 continue
@@ -229,7 +229,6 @@ class World:
                         if not d.terminated and d.state.dependency is not None:
                             dprint(f"Deadlock detected: device {d.name} is waiting on {d.state.dependency}")
                     raise RuntimeError("Deadlock detected: all devices are waiting but no network activity")
-
 
             # Simulate network
 
@@ -285,7 +284,7 @@ class World:
 
                 state.last_run_time = perf_counter()
 
-                if self.debug_run and not device.state.warmup:
+                if self.debug_run and not device.state.warmup and not device.remote:
                     with TorchProfiler(
                         out_dir="profile_out",
                         trace_name=f"{device.name}_run",
@@ -297,6 +296,12 @@ class World:
                             g.switch()
                             yield_count += 1
                             id += 1
+                elif device.remote:
+                    print("Running remote device:", device.name)
+                    # breakpoint()
+                    device.wc.run_continue()
+                    device.sync_remote_state()
+                    yield_count += 1
                 else:
                     g.switch()
                     yield_count += 1
@@ -332,6 +337,12 @@ class World:
             )
 
     def destroy(self):
+        if self.backend == "remote":
+            for device in self.devices:
+                if device.remote:
+                    device.wc.close()
+            self.background_server.stop()
+
         if self.device_type == "cuda":
             destroy_process_group()
             destroy_model_parallel()

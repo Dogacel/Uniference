@@ -95,7 +95,6 @@ class Chan:
         def send():
             for i in range(rounds):
                 receiver_id = (my_order + i + 1) % len(self.subscribers)
-                print(my_order, "Sending to ", receiver_id)
                 receiver = self.subscribers[receiver_id]
 
                 # We should emulate sending N rounds, therefore we add delay based on round number
@@ -118,7 +117,6 @@ class Chan:
 
             for i in range(rounds):
                 sender_id = (my_order - (i + 1)) % len(self.subscribers)
-                print(my_order, "Receiving from ", sender_id)
                 sender = self.subscribers[sender_id]
 
                 new_share = self.receive(me, f"all_gather_{id}_{sender.name}_{me.name}_{i}")

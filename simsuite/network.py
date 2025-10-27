@@ -157,7 +157,7 @@ class Network:
             )
 
             if duration_for_transmit < 0:
-                breakpoint()
+                duration_for_transmit = 0
 
             return self.internal_clock + duration_for_transmit
 

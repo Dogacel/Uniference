@@ -90,9 +90,12 @@ def run_once(
     )
 
     for device in world.devices:
+        if device.remote:
+            continue
+
         device.program.max_tokens = max_tokens
         device.program.yield_probability = yield_probability
-        device.send("input", [RawMessage(role="user", content=prompt)], "input")
+        device.program.input = [RawMessage(role="user", content=prompt)]
 
     world.run()
 

@@ -3,6 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, TYPE_CHECKING, Optional
+from simsuite.server import WebClient
+
+import asyncio
 
 if TYPE_CHECKING:
     from simsuite.world import Program, World
@@ -58,6 +61,7 @@ class Device:
         self.terminated = False
         self.state: "DeviceState"
         self.initialized = False
+        self.remote = False
 
     def initialize(self):
         if self.initialized:
@@ -80,3 +84,23 @@ class Device:
 
     def send(self, chan: str, data: Any, transmit_id: str, force_time: Optional[float] = None):
         self.world.chan(chan).send(self, data, transmit_id, target=self, force_time=force_time)
+
+
+class RemoteDevice(Device):
+    def __init__(self, args: DeviceArgs, world: "World", loop, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        super().__init__(args, None, world)
+        self.remote = True
+        self.wc = WebClient(loop, reader, writer)
+
+    def initialize(self):
+        self.wc.initialize()
+        self.initialized = True
+
+    def run(self, warmup: bool = False):
+        self.wc.run(warmup)
+
+    def sync_remote_state(self):
+        state_msg = self.wc.get_state()
+
+        self.state.clock = state_msg.clock
+        self.terminated = state_msg.terminated

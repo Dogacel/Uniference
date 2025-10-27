@@ -26,6 +26,7 @@ class YieldPerfProgram(Program):
     def __init__(
         self,
         ckpt_dir: str,
+        input: list[RawMessage],
         temperature: float = 0.6,
         top_p: float = 0.9,
         max_seq_len: int = 512,
@@ -40,6 +41,7 @@ class YieldPerfProgram(Program):
         super().__init__()
         self.model: Llama3
         self.ckpt_dir: str = ckpt_dir
+        self.input: list[RawMessage] = input
         self.temperature: float = temperature
         self.top_p: float = top_p
         self.max_seq_len: int = max_seq_len
@@ -91,9 +93,7 @@ class YieldPerfProgram(Program):
         me = self.me
         model = self.model
 
-        # Non client machines will be listening for cache updates
-        input: Optional[list[RawMessage]] = None
-        input = world.chan("input").receive(me, "input")
+        input = self.input
 
         def evaluate(model: Llama3, dialog: list[RawMessage]):
             batch = [dialog]
@@ -125,8 +125,7 @@ class YieldPerfProgram(Program):
                     break
             print("\n")
 
-        if input is not None:
-            for msg in input:
-                print(f"{msg.role.capitalize()}: {msg.content}\n")
-                evaluate(model, [msg])
-                model.clean_cache()
+        for msg in input:
+            print(f"{msg.role.capitalize()}: {msg.content}\n")
+            evaluate(model, [msg])
+            model.clean_cache()
