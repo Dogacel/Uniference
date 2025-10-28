@@ -11,6 +11,7 @@ from simsuite.server import BackgroundServer
 from simsuite.world import World
 from simsuite.device import DeviceArgs, DeviceSpec
 from simsuite.network import NetworkArgs
+from models.datatypes import RawMessage
 
 
 def main(
@@ -68,7 +69,7 @@ def main(
                 )
             )
 
-            world.run(warmup=True)
+            # world.run(warmup=True)
 
             for x in x_2d:
                 sequence_length = int(x[0])
@@ -103,6 +104,24 @@ def main(
 
         # Connect to server
         client = Client(name, me)
+
+        idx = 0
+
+        def client_pre_run(device):
+            nonlocal idx
+            x = x_2d[idx]
+            idx += 1
+            sequence_length = int(x[0])
+            yield_probability = float(x[1])
+            print(f"Sequence length: {sequence_length}, Yield probability: {yield_probability}")
+
+            sub_prompt = get_prompt_sequence_first_n(prompt, sequence_length)
+
+            device.program.yield_probability = yield_probability
+            device.program.input = [RawMessage(role="user", content=sub_prompt)]
+
+        client.pre_run = client_pre_run
+
         asyncio.run(client.connect_with_retries())
 
     if mode == "server":

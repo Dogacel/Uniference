@@ -133,7 +133,7 @@ class VoltageProgram(Program):
 
                 if result.finished or generated_token_count >= self.max_tokens:
                     # Termination signal
-                    world.chan("pre_processed_input").broadcast(me, None, "tokens", source=0, force_send=True)
+                    world.chan("pre_processed_input").broadcast(me, None, "tokens", source=0)
                     break
             print("\n")
 

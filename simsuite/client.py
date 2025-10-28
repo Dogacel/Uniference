@@ -3,6 +3,7 @@ import asyncio
 import os
 import platform
 import socket
+import traceback
 
 from greenlet import greenlet
 from time import perf_counter
@@ -25,8 +26,9 @@ class Client:
         state = {
             "clock": self.device.state.clock,
             "terminated": self.device.terminated,
+            "to_send": self.device.state.to_send,
+            "dependency": self.device.state.dependency,
         }
-        print("Sending state to remote device: ", state)
         response = {"type": "get_state", "status": "ok", **state}
         await send_msg(self.writer, response)
 
@@ -35,7 +37,15 @@ class Client:
         cont = await recv_msg(self.reader)
         if cont.get("type") != "continue":
             raise RuntimeError(f"Failed to get continue from remote device: {cont}")
+        print(cont)
+        if cont.get("dependency_data") is not None:
+            print("[2] Received dependency data from remote device")
+            self.device.state.dependency = {}
+            self.device.state.dependency.data = cont.get("dependency_data")
         await self.send_state()
+
+    def pre_run(self, device: Device):
+        raise NotImplementedError()
 
     async def handle_commands(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         # Get the underlying socket
@@ -62,9 +72,12 @@ class Client:
 
             g = greenlet(lambda: device_run_wrapper(self.device))
 
+            if not warmup:
+                self.pre_run(self.device)
+
             while not g.dead:
-                g.switch()
                 await self.wait_for_continue_async()
+                g.switch()
 
             self.device.terminate()
             await self.wait_for_continue_async()
@@ -80,14 +93,14 @@ class Client:
 
             elif cmd["type"] == "warmup":
                 print("[client] received warmup command")
-                await self.send_state()
+                self.device.world.remote_devices = cmd["devices"]
                 await run(warmup=True)
                 self.device.terminated = False
                 self.device.state.clock = 0.0
 
             elif cmd["type"] == "run":
                 print("[client] received run command")
-                await self.send_state()
+                self.device.world.remote_devices = cmd["devices"]
                 await run(warmup=False)
                 self.device.terminated = False
                 self.device.state.clock = 0.0
@@ -112,6 +125,13 @@ class Client:
                 await self.handle_commands(reader, writer)
                 break
             except Exception as e:
-                print(f"[client] connection error: {e}; retrying in {delay}s")
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, 30)  # backoff
+                if isinstance(e, ConnectionRefusedError):
+                    print(f"[client] connection error: {e}; retrying in {delay}s")
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, 30)  # backoff
+                else:
+                    print(f"[client] connection error: {e}")
+                    print(f"[client] Exception type: {type(e).__name__}")
+                    print("[client] Full traceback:")
+                    traceback.print_exc()
+                    raise e

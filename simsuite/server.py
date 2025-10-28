@@ -1,4 +1,5 @@
-# server.py
+from __future__ import annotations
+
 import asyncio
 import socket
 import threading
@@ -6,12 +7,18 @@ import uuid
 
 from dataclasses import dataclass
 from simsuite.remote import send_msg, recv_msg
+from typing import Any, TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from simsuite.world import World
 
 
 @dataclass
 class StateMessage:
     clock: float
     terminated: bool
+    to_send: dict | None = None
+    dependency: dict | None = None
 
 
 def debug_event_loop(location=""):
@@ -37,10 +44,11 @@ def debug_event_loop(location=""):
 
 
 class WebClient:
-    def __init__(self, loop, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    def __init__(self, loop, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, world: World):
         self.loop = loop
         self.reader = reader
         self.writer = writer
+        self.world = world
 
     async def initialize_async(self):
         print("Initializing remote device")
@@ -62,6 +70,8 @@ class WebClient:
         return StateMessage(
             clock=response["clock"],
             terminated=response["terminated"],
+            to_send=response.get("to_send", None),
+            dependency=response.get("dependency", None),
         )
 
     def get_state(self) -> StateMessage:
@@ -70,20 +80,40 @@ class WebClient:
 
     async def run_async(self, warmup: bool = False):
         if warmup:
-            await send_msg(self.writer, {"type": "warmup"})
+            await send_msg(
+                self.writer,
+                {
+                    "type": "warmup",
+                    "device_count": len(self.world.devices),
+                    "devices": [d.name for d in self.world.devices],
+                },
+            )
         else:
-            await send_msg(self.writer, {"type": "run"})
+            await send_msg(
+                self.writer,
+                {
+                    "type": "run",
+                    "device_count": len(self.world.devices),
+                    "devices": [d.name for d in self.world.devices],
+                },
+            )
 
     def run(self, warmup: bool = False):
         future = asyncio.run_coroutine_threadsafe(self.run_async(warmup), self.loop)
         return future.result()
 
-    async def run_continue_async(self):
+    async def run_continue_async(self, data):
         print("Sending continue to remote device")
-        await send_msg(self.writer, {"type": "continue"})
+        await send_msg(
+            self.writer,
+            {
+                "type": "continue",
+                "dependency_data": data,
+            },
+        )
 
-    def run_continue(self):
-        future = asyncio.run_coroutine_threadsafe(self.run_continue_async(), self.loop)
+    def run_continue(self, data):
+        future = asyncio.run_coroutine_threadsafe(self.run_continue_async(data), self.loop)
         return future.result()
 
     async def close_async(self):
@@ -120,8 +150,8 @@ class BackgroundServer:
         await send_msg(writer, {"type": "ping"})
         await recv_msg(reader)
 
-        while True:
-            await asyncio.sleep(10)  # Keep the connection alive
+        # while True:
+        #     await asyncio.sleep(10)  # Keep the connection alive
 
     async def _run_server(self):
         # Optional TLS (uncomment and provide certs if needed)

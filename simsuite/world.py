@@ -17,7 +17,7 @@ from simsuite.network import Network, NetworkArgs
 from simsuite.profiler import TorchProfiler
 from simsuite.common import dprint
 from simsuite.pytorch_chan import PytorchChan
-from simsuite.server import BackgroundServer
+from simsuite.remote_chan import RemoteChan
 
 
 class PreparedEvent:
@@ -85,9 +85,9 @@ class World:
         self.device_type = get_device()
 
         self.backend = kwargs.get("backend", os.getenv("WORLD_BACKEND", "simulation"))
+        self.mode = kwargs.get("mode", "server")
 
         print("Using backend:", self.backend)
-
 
     def device(self, deviceArgs: DeviceArgs, program: Program):
         device = Device(deviceArgs, program, self)
@@ -98,10 +98,8 @@ class World:
         self.event_logger.log_event({"device": device.name, "action": "created"})
         return device
 
-    def remote_device(self, loop, reader, writer):
-        device = RemoteDevice(
-            DeviceArgs(spec=DeviceSpec(), client=True, name="remote_device"), self, loop, reader, writer
-        )
+    def remote_device(self, loop, reader, writer, client_id: str):
+        device = RemoteDevice(DeviceArgs(spec=DeviceSpec(), client=True, name=client_id), self, loop, reader, writer)
         self.devices.append(device)
         self.device_states[device] = DeviceState(device)
         device.state = self.device_states[device]
@@ -138,8 +136,11 @@ class World:
                 return chan
         if self.backend == "pytorch":
             new_chan = PytorchChan(tag, self)
+        elif self.backend == "remote" and self.mode == "client":
+            new_chan = RemoteChan(tag, self)
         else:
             new_chan = Chan(tag, self)
+
         self.chans.append(new_chan)
         self.event_logger.log_event({"chan": tag, "action": "created"})
         return new_chan
@@ -191,14 +192,16 @@ class World:
 
         for device in self.devices:
             device.initialize()
-            if device.remote:
-                device.run(warmup=warmup)
             self._runq.append(
                 (
                     device,
                     greenlet(lambda: device_run_wrapper(device)),
                 )
             )
+
+        for device in self.devices:
+            if device.remote:
+                device.run(warmup=warmup)
 
         id = 0
         yield_count = 0
@@ -215,7 +218,7 @@ class World:
             device, g = self._runq.pop(0)
             state = self.device_states[device]
 
-            print("Simulating device:", device.name, "at time", state.clock)
+            dprint("Simulating device:", device.name, "at time", state.clock)
 
             if device.terminated:
                 print(f"Device {device.name} is terminated after {state.clock} seconds")
@@ -275,6 +278,8 @@ class World:
                 if millis_took > 100:
                     breakpoint()
                 state.clock = max(state.clock, state.dependency.end_time)
+                if device.remote:
+                   world.networks[0].complete_transmit(state.dependency, state.clock)
 
             # Device is runnable if no network dependency exists or the dependency is completed.
             if state.dependency is None or dependency_completed:
@@ -299,8 +304,24 @@ class World:
                 elif device.remote:
                     print("Running remote device:", device.name)
                     # breakpoint()
-                    device.wc.run_continue()
-                    device.sync_remote_state()
+                    device.wc.run_continue(state.dependency.data if state.dependency is not None else None)
+                    remote_state = device.sync_remote_state()
+
+                    if remote_state.to_send is not None:
+                        print(f"Device {device.name} sending data to remote target")
+                        data = remote_state.to_send["data"]
+                        target = remote_state.to_send["target"]
+                        target = [d for d in self.devices if d.name == target][0]
+                        size = remote_state.to_send["size"]
+                        time = remote_state.to_send["time"]
+                        transmit_id = remote_state.to_send["id"]
+
+                        network.transmit(data, size=size, world_time=time, id=transmit_id, source=device, target=target)
+
+                    if remote_state.dependency is not None:
+                        print(f"Device {device.name} receiving data from remote dependency: {remote_state.dependency}")
+                        device.state.dependency = self.networks[0].search_transmit(remote_state.dependency)
+
                     yield_count += 1
                 else:
                     g.switch()

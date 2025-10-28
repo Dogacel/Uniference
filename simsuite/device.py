@@ -30,6 +30,11 @@ class DeviceState:
     dependency: Optional[Transmit | str] = None
 
     """
+    Only used by remote devices
+    """
+    to_send: Optional[dict] = None
+
+    """
     Current time perception for the device.
     """
     clock: float = 0.0
@@ -46,7 +51,7 @@ class DeviceState:
 
     def sync_clock(self) -> float:
         now = perf_counter()
-        self.clock += (now - self.last_run_time) * self.device.spec.speed_scale
+        self.clock = max(self.clock, self.clock + (now - self.last_run_time) * self.device.spec.speed_scale)
         self.last_run_time = now
         return self.clock
 
@@ -87,10 +92,12 @@ class Device:
 
 
 class RemoteDevice(Device):
-    def __init__(self, args: DeviceArgs, world: "World", loop, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    def __init__(
+        self, args: DeviceArgs, world: "World", loop, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ):
         super().__init__(args, None, world)
         self.remote = True
-        self.wc = WebClient(loop, reader, writer)
+        self.wc = WebClient(loop, reader, writer, world)
 
     def initialize(self):
         self.wc.initialize()
@@ -104,3 +111,4 @@ class RemoteDevice(Device):
 
         self.state.clock = state_msg.clock
         self.terminated = state_msg.terminated
+        return state_msg
