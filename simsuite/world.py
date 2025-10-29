@@ -119,6 +119,9 @@ class World:
             if self.device_type == "cuda":
                 torch.cuda.synchronize()
 
+            if self.device_type == "mps":
+                torch.mps.synchronize()
+
             if device is not None:
                 device.state.sync_clock()
 
@@ -275,8 +278,8 @@ class World:
             if dependency_completed:
                 dprint(f"Device {device.name} dependency completed: {state.dependency}")
                 millis_took = (state.dependency.end_time - state.clock) * 1000
-                if millis_took > 100:
-                    breakpoint()
+                # if millis_took > 100:
+                    # breakpoint()
                 state.clock = max(state.clock, state.dependency.end_time)
                 if device.remote:
                    world.networks[0].complete_transmit(state.dependency, state.clock)

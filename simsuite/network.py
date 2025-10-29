@@ -156,6 +156,8 @@ class Network:
                 *self.network_params,
             )
 
+            # print(f"Duration for transmit calculation: {duration_for_transmit}")
+
             if duration_for_transmit < 0:
                 duration_for_transmit = 0
 
@@ -178,6 +180,7 @@ class Network:
             # This line behaves weird for async_ops, so change != to == while running async benchmark
             if t.start_time <= self.internal_clock and ((not t.completed()) or t.target_device.state.dependency != t)
         ]
+        # print(f"Available transmits: {available_transmits}")
         first_to_end = min(available_transmits, key=end_time, default=None)
 
         if first_to_end is not None and first_to_end.completed():
@@ -187,8 +190,10 @@ class Network:
             )
             return (-1, None)
 
-        # Find the time when the next transmit will end optimistically assuming there will be no changes in bandwidth.
+        # Find the time when the next transmit b_voltagewill end optimistically assuming there will be no changes in bandwidth.
+        # print(f"First to end: {first_to_end}")
         first_end_time = end_time(first_to_end)
+        # print(f"First end time: {first_end_time}")
 
         # Find the time when the next transmit will start.
         # If start_time == internal_clock, we consider it already started.

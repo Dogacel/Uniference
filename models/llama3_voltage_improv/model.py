@@ -361,11 +361,12 @@ class TransformerBlock(nn.Module):
             xp = x
 
         # with torch.profiler.record_function(f"xq"):
-        # start = perf_counter()
+        start = perf_counter()
         xp_norm = self.attention_norm(xp)
         xq = self.attention(xp_norm, None, None, None, None, None, None, mode="xq")
-        # end = perf_counter()
-        # print(f"Layer {self.layer_id} xq time: {(end - start)*1000:.3f} milliseconds")
+        end = perf_counter()
+        # torch.mps.synchronize()
+        print(f"Layer {self.layer_id} xq time: {(end - start)*1000:.3f} milliseconds")
 
         if all_gather_recv is not None:
             real_x = all_gather_recv()
