@@ -231,7 +231,11 @@ class Attention(nn.Module):
 
         bsz, seqlen, _ = x.shape
         bsz_p, seqlen_p, _ = xp.shape
-        xq, xk, xv = self.wq(xp), self.wk(x), self.wv(x)
+
+        with torch.profiler.record_function("xq"):
+            xq = self.wq(xp)
+
+        xk, xv = self.wk(x), self.wv(x)
 
         xq = xq.view(bsz_p, seqlen_p, self.n_local_heads, self.head_dim)
         xk = xk.view(bsz, seqlen, self.n_local_kv_heads, self.head_dim)
@@ -420,7 +424,7 @@ class Transformer(nn.Module):
 
         # Gathered tensors will have different sizes if seqlen is not divisible by total
         initial_size = h.size(1)
-        target_size = h.size(1) // world.chan("forward").size() + (1 if 0 < h.size(1) % total else 0)  
+        target_size = h.size(1) // world.chan("forward").size() + (1 if 0 < h.size(1) % total else 0)
 
         # print(f"{me.name}: initial h size: {h.size()}, target size: {target_size}")
 
@@ -442,10 +446,9 @@ class Transformer(nn.Module):
                     elem = elem[:, :-1, :]
                 new_h.append(elem)
 
-            h = torch.cat(new_h, dim=1) 
+            h = torch.cat(new_h, dim=1)
 
             # print(f"{me.name}: After cat {i}, h size: {h.size()}")
-
 
         h = self.norm(h)
         output = self.output(h).float()

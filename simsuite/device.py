@@ -10,6 +10,7 @@ import asyncio
 if TYPE_CHECKING:
     from simsuite.world import Program, World
     from simsuite.network import Transmit
+from contextlib import contextmanager
 
 
 @dataclass
@@ -90,6 +91,16 @@ class Device:
     def send(self, chan: str, data: Any, transmit_id: str, force_time: Optional[float] = None):
         self.world.chan(chan).send(self, data, transmit_id, target=self, force_time=force_time)
 
+    @contextmanager
+    def with_slowdown(self, factor: float):
+        self.state.sync_clock()
+        original_scale = self.spec.speed_scale
+        self.spec.speed_scale *= factor
+        try:
+            yield self
+        finally:
+            self.state.sync_clock()
+            self.spec.speed_scale = original_scale
 
 class RemoteDevice(Device):
     def __init__(

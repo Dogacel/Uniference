@@ -1,6 +1,20 @@
-# Edge Sim Suite
+# Uniference 
 
-Simulation suite for running transformer models on edge devices in distributed settings.
+Simulation suite for running transformer models on in a distributed settings.
+
+> Developing and evaluating distributed inference algorithms remains difficult due to the lack of standardized tools
+for modeling heterogeneous devices and networks. Existing studies often rely on ad-hoc testbeds or proprietary
+infrastructure, making results hard to reproduce and limiting exploration of hypothetical hardware or network
+configurations. We present Uniference, a discrete-event simulation (DES) framework designed for developing,
+benchmarking, and deploying distributed AI models within a unified environment. Uniference models device
+and network behavior through lightweight logical processes that synchronize only on communication primitives,
+eliminating rollbacks while preserving the causal order. It integrates seamlessly with PyTorch Distributed,
+enabling the same codebase to transition from simulation to real deployment. Our evaluation demonstrates
+that Uniference predicts runtime with up to 98.6% accuracy compared to physical deployments across
+diverse backends and hardware setups. By bridging simulation and deployment, Uniference provides an
+accessible, reproducible platform for studying distributed inference algorithms and exploring future system
+designs, from high-performance clusters to edge-scale devices
+
 
 ![Simulation Suite Overview](https://i.imgur.com/MVGREdV.png)
 

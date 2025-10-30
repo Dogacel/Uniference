@@ -31,11 +31,11 @@ Later, clone the simulation suite.
 
 ```shell
 git config --global credential.helper store
-git clone https://github.com/Dogacel/edge-llm-benchmark.git
+git clone https://github.com/Dogacel/uniference.git
 # Those steps are only needed when working with a private repository.
 # Recommended to use GitHub fine-grained read-only API token.
 
-cd edge-llm-benchmark
+cd uniference
 
 # Install uv
 curl -LsSf https://astral.sh/uv/install.sh | sh

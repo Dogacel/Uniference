@@ -11,7 +11,7 @@ from simsuite.units import Gbps, Mbps, ms
 def main(
     output_file: str = "results/run_report.json",
     prompt_file: str = "checkpoints/prompt_5000.txt",
-    text_lengths: list[int] = [8, 32, 256],
+    text_lengths: list[int] = [8, 32, 64, 256],
     speed: list[float] = [100 * Mbps, 1 * Gbps],
     latency: list[float] = [1 * ms, 10 * ms],
     repeats: int = 10,

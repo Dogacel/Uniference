@@ -255,7 +255,7 @@ class Attention(nn.Module):
         mode: Literal["attention", "xq", "keys", "values"] = "attention",
     ):
         if mode == "xq":
-            return self.calculate_xq(x, freqs_cis)
+            return self.calculate_xq(x, freqs_cis_xq)
         elif mode == "keys":
             return self.calculate_keys(x, freqs_cis)
         elif mode == "values":
@@ -361,12 +361,16 @@ class TransformerBlock(nn.Module):
             xp = x
 
         # with torch.profiler.record_function(f"xq"):
-        start = perf_counter()
+        # This ratio comes from profiling
+        # with self.me.with_slowdown(factor=10.0):
+        # start = perf_counter()
         xp_norm = self.attention_norm(xp)
-        xq = self.attention(xp_norm, None, None, None, None, None, None, mode="xq")
-        end = perf_counter()
-        # torch.mps.synchronize()
-        print(f"Layer {self.layer_id} xq time: {(end - start)*1000:.3f} milliseconds")
+        with torch.profiler.record_function(f"xq"):
+            xq = self.attention(xp_norm, None, None, None, None, freqs_cis_xq, None, mode="xq")
+        # end = perf_counter()
+        # if world.backend == "mps":
+            # torch.mps.synchronize()
+        # print(f"Layer {self.layer_id} xq time: {(end - start)*10000:.3f} milliseconds")
 
         if all_gather_recv is not None:
             real_x = all_gather_recv()
