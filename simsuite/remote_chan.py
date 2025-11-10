@@ -17,10 +17,12 @@ if TYPE_CHECKING:
 class RemoteChan:
     name: str
     subscribers: list[str]
+    _remote_devices_cache: list[str]  # Cache for remote devices
 
     def __init__(self, name: str, world: World):
         self.name = name
         self.subscribers = []
+        self._remote_devices_cache = []
         self.world = world
 
     def subscribe(self, device: Device):
@@ -29,13 +31,21 @@ class RemoteChan:
     def unsubscribe(self, device: Device):
         self.subscribers.remove(device)
 
+    def _get_remote_devices(self):
+        """Get remote devices with caching to avoid repeated lookups."""
+        if not self._remote_devices_cache or self._remote_devices_cache != self.world.remote_devices:
+            self._remote_devices_cache = self.world.remote_devices
+        return self._remote_devices_cache
+
     def rank(self, device: Device) -> int:
-        self.subscribers = self.world.remote_devices
-        return self.subscribers.index(device.name)
+        remote_devices = self._get_remote_devices()
+        self.subscribers = remote_devices
+        return remote_devices.index(device.name)
 
     def size(self) -> int:
-        self.subscribers = self.world.remote_devices
-        return len(self.subscribers)
+        remote_devices = self._get_remote_devices()
+        self.subscribers = remote_devices
+        return len(remote_devices)
 
     def broadcast(self, me: Device, data: Any, id: str, source: int, force_send: bool = False) -> Any:
         """
