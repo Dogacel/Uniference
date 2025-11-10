@@ -51,18 +51,23 @@ def sum_transmit_durations(rows: List[Dict[str, Any]]) -> Tuple[float, int]:
         count = 0
         for r in rows:
                 try:
+                        # Early exit if not transmit_end
                         if r.get("action") != "transmit_end":
                                 continue
                         d = r.get("duration")
                         if d is None:
                                 continue
-                        # accept numeric or numeric strings
+                        # Convert string to float if needed
                         if isinstance(d, str):
-                                d = float(d) if d.strip() != "" else None
-                        if not isinstance(d, (int, float)):
+                                d = float(d) if d.strip() else None
+                                if d is None:
+                                        continue
+                        # Check if numeric and positive in one condition
+                        elif not isinstance(d, (int, float)):
                                 continue
+                        # Only add if positive
                         if d > 0:
-                                total += float(d)
+                                total += d
                                 count += 1
                 except Exception:
                         continue
@@ -83,15 +88,12 @@ def process_profile_array(profiles: List[Dict[str, Any]], base_dir: Path) -> Non
                         continue
                 rows = parse_log_file(log_path)
                 s, c = sum_transmit_durations(rows)
-                # print(s, c)
+                # Skip if no transmit data found
                 if s == 0 and c == 0:
                         continue
-                # update numeric totals safely
+                # update numeric totals
                 entry["total_transmit_duration"] = s
-                entry["transmit_count"] = c
-                # avoid negative counts
-                if entry["transmit_count"] < 0:
-                        entry["transmit_count"] = 0
+                entry["transmit_count"] = max(c, 0)  # ensure non-negative in one operation
 
 
 def main():

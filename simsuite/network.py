@@ -116,18 +116,17 @@ class Network:
             dprint(f"Network already at or beyond max_time {max_time} with internal clock {self.internal_clock}.")
             return (self.internal_clock, None)
 
+        # Pre-compute active transmits count per source device to avoid O(n²) complexity
+        # This caches the count to avoid recomputing for every transmit
+        active_counts = {}
+        for t in self.transmits:
+            if not t.completed() and t.start_time <= self.internal_clock:
+                src = t.source_device
+                active_counts[src] = active_counts.get(src, 0) + 1
+
         def active_transmits(transmit: Transmit) -> int:
-            # If start_time == internal_clock, we consider it already started.
-            # TODO: Maybe max(1, outgoing from source, incoming to target).
-            return len(
-                [
-                    t
-                    for t in self.transmits
-                    if not t.completed()
-                    and t.start_time <= self.internal_clock
-                    and t.source_device == transmit.source_device
-                ]
-            )
+            # Use cached count instead of recalculating
+            return active_counts.get(transmit.source_device, 0)
 
         # Helper to compute true bandwidth based on full/half duplex setting.
         def true_bandwidth(transmit: Transmit, delta_time: float) -> float:

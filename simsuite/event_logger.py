@@ -17,12 +17,17 @@ class WorldEventLogger:
         transmit_count = 0
 
         for record in self.events:
-            if record.get("action") == "transmit_end" and "duration" in record and record["duration"] > 0:
-                total_duration += record["duration"]
-                transmit_count += 1
-
-            if record.get("action") == "transmit_start" and "size" in record:
-                total_size += record["size"]
+            action = record.get("action")
+            
+            if action == "transmit_end":
+                duration = record.get("duration")
+                if duration is not None and duration > 0:
+                    total_duration += duration
+                    transmit_count += 1
+            elif action == "transmit_start":
+                size = record.get("size")
+                if size is not None:
+                    total_size += size
 
         return {
             "total_transmit_duration": total_duration,

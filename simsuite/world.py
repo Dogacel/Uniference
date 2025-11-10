@@ -229,10 +229,13 @@ class World:
 
             # Check if we are in a deadlock.
             # Worst case, only a single device is runnable, so we won't do anything for len(devices)-1 checks.
-            if deadlock_checks > len(self.devices) + sum([len(x.transmits) for x in self.networks]):
-                if all(d.state.dependency is not None for d in self.devices if not d.terminated):
-                    for d in self.devices:
-                        if not d.terminated and d.state.dependency is not None:
+            # Cache transmit count calculation
+            total_transmits = sum(len(x.transmits) for x in self.networks)
+            if deadlock_checks > len(self.devices) + total_transmits:
+                non_terminated = [d for d in self.devices if not d.terminated]
+                if all(d.state.dependency is not None for d in non_terminated):
+                    for d in non_terminated:
+                        if d.state.dependency is not None:
                             dprint(f"Deadlock detected: device {d.name} is waiting on {d.state.dependency}")
                     raise RuntimeError("Deadlock detected: all devices are waiting but no network activity")
 
@@ -240,14 +243,13 @@ class World:
 
             # A network simulation can only run up to the point where the next transmit completes
             # or the next device becomes runnable. Because otherwise, the bandwidth sharing simulation won't be correct.
-            run_until = min(
-                (
-                    device.state.clock
-                    for device in self.devices
-                    if not device.terminated and device.state.dependency is None
-                ),
-                default=float("inf"),
-            )
+            # Cache runnable devices to avoid filtering multiple times
+            runnable_clocks = [
+                device.state.clock
+                for device in self.devices
+                if not device.terminated and device.state.dependency is None
+            ]
+            run_until = min(runnable_clocks, default=float("inf"))
 
             # Step all networks.
             for network in self.networks:
@@ -266,10 +268,12 @@ class World:
 
             # Only simulate the device that has the lowest clock time and is runnable.
             # If the device is at max_time, it can only run if every other device is also at max_time.
+            # Filter other device times from already computed runnable devices
             other_device_times = [
-                d.state.clock for d in self.devices if d != device and not d.terminated and d.state.dependency is None
+                d.state.clock for d in self.devices 
+                if d != device and not d.terminated and d.state.dependency is None
             ]
-            if state.clock == self.max_time and not all(t == self.max_time for t in other_device_times):
+            if state.clock == self.max_time and other_device_times and not all(t == self.max_time for t in other_device_times):
                 dprint(f"Device {device.name} at max_time {self.max_time} but others are not: {other_device_times}")
                 self._runq.append((device, g))
                 continue

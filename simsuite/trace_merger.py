@@ -27,14 +27,11 @@ def read_custom_events(path):
 
     grouped = defaultdict(list)
     for e in data:
-        if "device" in e and "action" in e and e["action"] in {"send"}:
+        action = e.get("action")
+        # Cache action check to avoid multiple get() calls
+        if action == "send" and "device" in e:
             grouped[e.get("device")].append(e)
-        if (
-            "target_device" in e
-            and "source_device" in e
-            and "action" in e
-            and e["action"] in {"transmit_start", "transmit_end"}
-        ):
+        elif action in {"transmit_start", "transmit_end"} and "target_device" in e and "source_device" in e:
             grouped[e.get("target_device")].append(e)
             # grouped[e.get("source_device")].append(e)
 

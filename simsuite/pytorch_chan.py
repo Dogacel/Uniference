@@ -57,7 +57,8 @@ class PytorchChan:
         return data
 
     def all_gather(self, me: Device, my_share: Tensor, id: str) -> list[Tensor]:
-        tensor_list = [torch.zeros_like(my_share) for i in range(torch.distributed.get_world_size())]
+        world_size = torch.distributed.get_world_size()
+        tensor_list = [torch.zeros_like(my_share) for _ in range(world_size)]
         all_gather(tensor_list, my_share)
         return tensor_list
 
