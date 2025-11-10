@@ -25,21 +25,27 @@ class Chan:
     name: str
     listeners: list[Callable[[Any], None]]
     subscribers: list[Device]
+    _rank_cache: dict[Device, int]  # Cache for faster rank lookups
 
     def __init__(self, name: str, world: World):
         self.name = name
         self.listeners = []
         self.subscribers = []
+        self._rank_cache = {}
         self.world = world
 
     def subscribe(self, device: Device):
         self.subscribers.append(device)
+        self._rank_cache[device] = len(self.subscribers) - 1
 
     def unsubscribe(self, device: Device):
         self.subscribers.remove(device)
+        # Rebuild cache after removal
+        self._rank_cache = {dev: idx for idx, dev in enumerate(self.subscribers)}
 
     def rank(self, device: Device) -> int:
-        return self.subscribers.index(device) if device in self.subscribers else -1
+        # Use cached rank for O(1) lookup instead of O(n)
+        return self._rank_cache.get(device, -1)
 
     def size(self) -> int:
         return len(self.subscribers)
