@@ -26,12 +26,13 @@ def get_prompt_sequence_first_n(prompt: str, n: int) -> str:
 
 def setup_world(
     device_count: int,
+    pp_size: int,
     seq_len: int,
     output_file: str,
     program: Callable[..., Program],
     batch_size: int = 1,
     program_kwargs: dict = {},
-    network_params=[0.0005, 1.02e-08],
+    network_params=[0.0001, 1.02e-11],
     world_kwargs: dict = {},
 ) -> World:
     world = World(output_file=output_file, **world_kwargs)
@@ -40,6 +41,21 @@ def setup_world(
 
     devices = []
     for i in range(device_count):
+        # 0 1 2 3 4 5 6 7
+        # i % (device_count // tp_size) ->
+        # 0 1 0 1 0 1 0 1 (tp_size=2, device_count=8)
+        # 0 0 1 1 2 2 3 3 (tp_size=4, device_count=8)
+        # i // tp_size ->
+        # 0 0 1 1 2 2 3 3 (tp_size=2, device_count=8)
+        # 0 0 0 0 1 1 1 1 (tp_size=4, device_count=8)
+
+        # 8 / 2 = 4 stages
+        tp_size = device_count // pp_size
+        pp_rank = i % pp_size
+        tp_group = i % pp_size # 0 -> 0, 1 -> 1, 2 -> 0, 3 -> 1
+
+        print(f"For {i}-th device: tp_group={tp_group}, pp_rank={pp_rank}, pp_size={pp_size}")
+
         device = world.device(
             deviceArgs=DeviceArgs(spec=device_spec, client=True, name=f"phone_{i + 1}"),
             program=program(
@@ -49,9 +65,18 @@ def setup_world(
                 max_seq_len=seq_len,
                 max_tokens=1,
                 max_batch_size=batch_size,
-                **program_kwargs,
+                tp_group=tp_group,
+                pp_size=pp_size,
+                pp_rank=pp_rank,
             ),
         )
+        device.tp_group = tp_group
+        device.pp_rank = pp_rank
+        device.pp_size = pp_size
+
+        device.tp_chan().subscribe(device)
+        device.pp_chan().subscribe(device)
+
         devices.append(device)
         world.chan("input").subscribe(device)
         world.chan("all_gather").subscribe(device)

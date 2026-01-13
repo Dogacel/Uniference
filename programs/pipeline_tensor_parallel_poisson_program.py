@@ -3,10 +3,11 @@ from simsuite.world import Program
 from typing import Optional
 
 import fire
+import time
 from termcolor import cprint
 
 from models.datatypes import RawMessage
-from models.llama3_tp.generation import Llama3
+from models.llama3_tp_pp.generation import Llama3
 
 import os
 import torch
@@ -22,18 +23,20 @@ def get_device():
     return "cpu"
 
 
-class TensorParallelProgram(Program):
+class PipelineTensorParallelPoissonProgram(Program):
     def __init__(
         self,
         ckpt_dir: str,
         temperature: float = 0.6,
         top_p: float = 0.9,
         max_seq_len: int = 512,
-        max_batch_size: int = 1,
+        max_batch_size: int = 8,
         world_size: Optional[int] = None,
         quantization_mode: Optional[str] = None,
         disable_kv_cache: bool = False,
         max_tokens=256,
+        tp_group=0,
+        pp_group=0,
         **kwargs,
     ):
         super().__init__()
@@ -47,11 +50,19 @@ class TensorParallelProgram(Program):
         self.quantization_mode: Optional[str] = quantization_mode
         self.disable_kv_cache: bool = disable_kv_cache
         self.max_tokens: int = max_tokens
+        self.tp_group: int = tp_group
+        self.pp_group: int = pp_group
 
     def initialize(self, me: Device) -> None:
         self.me = me
+
+        me.tp_group = self.tp_group
+        me.pp_group = self.pp_group
+
         self.model = Llama3.build(
             ckpt_dir=self.ckpt_dir,
+            tp_group=self.tp_group,
+            pp_group=self.pp_group,
             max_seq_len=self.max_seq_len,
             max_batch_size=self.max_batch_size,
             world_size=self.world_size,
@@ -88,15 +99,9 @@ class TensorParallelProgram(Program):
         model = self.model
 
         # Non client machines will be listening for cache updates
-        input: Optional[list[RawMessage]] = None
-
-        if world.backend == "pytorch":
-            input = world.next_input
-        else:
-            input = world.chan("input").receive(me, "starting_input")
 
         def evaluate(model: Llama3, dialog: list[RawMessage], exit_early: bool = False):
-            batch = [dialog] * self.max_batch_size
+            batch = dialog
 
             generated_token_count = 0
 
@@ -107,6 +112,7 @@ class TensorParallelProgram(Program):
                 max_gen_len=self.max_seq_len,
             ):
                 result = token_results[0]
+                print(len(token_results))
                 generated_token_count += 1
 
                 world.event_logger.log_event(
@@ -125,8 +131,42 @@ class TensorParallelProgram(Program):
                     break
             print("\n")
 
-        if input is not None:
-            for msg in input:
-                print(f"{msg.role.capitalize()}: {msg.content}\n")
-                evaluate(model, [msg])
+        start_time = time.time() if world.backend == "pytorch" else me.state.sync_clock()
+
+        all_messages = me.world.inputs
+
+        delays = []
+
+        while len(all_messages) > 0:
+            torch.distributed.barrier()
+
+            now = time.time() if world.backend == "pytorch" else me.state.sync_clock()
+
+            visible_messages = [msg for msg in all_messages if msg["timestamp"] <= now]
+            all_messages = [msg for msg in all_messages if msg["timestamp"] > now]
+
+            print(f"Total messages in queue: {len(all_messages)}. Visible messages: {len(visible_messages)}")
+
+            if len(visible_messages) == 0:
+                time.sleep(0.1)
+                continue
+
+            # Group visible_messages into batches of max_batch_size
+            batches = [
+                visible_messages[i:i + self.max_batch_size]
+                for i in range(0, len(visible_messages), self.max_batch_size)
+            ]
+
+            for batch in batches:
+                dialogs = [[RawMessage(role="user", content=msg["content"])] for msg in batch]
+                evaluate(model, dialogs)
                 model.clean_cache()
+
+            end_time = time.time() if world.backend == "pytorch" else me.state.sync_clock()
+
+            for msg in visible_messages:
+                delays.append(end_time - msg["timestamp"])
+
+            time.sleep(0.1)
+
+        print(f"Average delay: {sum(delays)/len(delays):.4f} seconds over {len(delays)} messages.")

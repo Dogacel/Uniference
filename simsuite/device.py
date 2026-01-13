@@ -68,6 +68,9 @@ class Device:
         self.state: "DeviceState"
         self.initialized = False
         self.remote = False
+        self.tp_group: Optional[int] = None
+        self.pp_size: Optional[int] = None
+        self.pp_rank: Optional[int] = None
 
     def initialize(self):
         if self.initialized:
@@ -75,6 +78,12 @@ class Device:
         print(f"Initializing device {self.name}")
         self.program.initialize(self)
         self.initialized = True
+
+    def tp_chan(self):
+        return self.world.chan(f"tp_{self.tp_group}")
+
+    def pp_chan(self):
+        return self.world.chan(f"pp_{self.pp_rank}")
 
     def run(self, warmup: bool = False):
         if warmup:

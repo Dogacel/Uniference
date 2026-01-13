@@ -6,7 +6,7 @@ import fire
 from termcolor import cprint
 
 from models.datatypes import RawMessage
-from models.llama3_tp.generation import Llama3
+from models.llama3_tp_pp.generation import Llama3
 
 import os
 import torch
@@ -22,7 +22,7 @@ def get_device():
     return "cpu"
 
 
-class TensorParallelProgram(Program):
+class PipelineTensorParallelProgram(Program):
     def __init__(
         self,
         ckpt_dir: str,
@@ -34,6 +34,8 @@ class TensorParallelProgram(Program):
         quantization_mode: Optional[str] = None,
         disable_kv_cache: bool = False,
         max_tokens=256,
+        tp_group=0,
+        pp_group=0,
         **kwargs,
     ):
         super().__init__()
@@ -47,11 +49,19 @@ class TensorParallelProgram(Program):
         self.quantization_mode: Optional[str] = quantization_mode
         self.disable_kv_cache: bool = disable_kv_cache
         self.max_tokens: int = max_tokens
+        self.tp_group: int = tp_group
+        self.pp_group: int = pp_group
 
     def initialize(self, me: Device) -> None:
         self.me = me
+
+        me.tp_group = self.tp_group
+        me.pp_group = self.pp_group
+
         self.model = Llama3.build(
             ckpt_dir=self.ckpt_dir,
+            tp_group=self.tp_group,
+            pp_group=self.pp_group,
             max_seq_len=self.max_seq_len,
             max_batch_size=self.max_batch_size,
             world_size=self.world_size,

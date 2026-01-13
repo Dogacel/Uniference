@@ -78,10 +78,10 @@ class Chan:
             self.send(
                 me,
                 new_share,
-                f"all_gather_{id}_{me.name}_{receiver.name}_{i}",
+                f"{self.name}_all_gather_{id}_{me.name}_{receiver.name}_{i}",
                 target=self.subscribers[receiver_id],
             )
-            new_share = self.receive(me, f"all_gather_{id}_{sender.name}_{me.name}_{i}")
+            new_share = self.receive(me, f"{self.name}_all_gather_{id}_{sender.name}_{me.name}_{i}")
 
             round = (my_order - i - 1) % len(self.subscribers)
             items[round] = new_share.to(my_share.device)
@@ -103,7 +103,7 @@ class Chan:
                 self.send(
                     me,
                     my_share,
-                    f"all_gather_{id}_{me.name}_{receiver.name}_{i}",
+                    f"{self.name}_all_gather_{id}_{me.name}_{receiver.name}_{i}",
                     target=self.subscribers[receiver_id],
                     force_time=time,
                     no_yield=True,
@@ -119,7 +119,7 @@ class Chan:
                 sender_id = (my_order - (i + 1)) % len(self.subscribers)
                 sender = self.subscribers[sender_id]
 
-                new_share = self.receive(me, f"all_gather_{id}_{sender.name}_{me.name}_{i}")
+                new_share = self.receive(me, f"{self.name}_all_gather_{id}_{sender.name}_{me.name}_{i}")
                 items[sender_id] = new_share.to(my_share.device)
 
             return items
@@ -162,19 +162,19 @@ class Chan:
             self.send(
                 me,
                 partial[..., send_idx, :],
-                f"all_reduce_reduce_{id}_{me.name}_{self.subscribers[right].name}_{i}",
+                f"{self.name}_all_reduce_reduce_{id}_{me.name}_{self.subscribers[right].name}_{i}",
                 target=self.subscribers[right],
             )
 
             # Receive neighbor's chunk and reduce into our recv slot
-            incoming = self.receive(me, f"all_reduce_reduce_{id}_{self.subscribers[left].name}_{me.name}_{i}")
+            incoming = self.receive(me, f"{self.name}_all_reduce_reduce_{id}_{self.subscribers[left].name}_{me.name}_{i}")
             partial[..., recv_idx, :] = reduce_fn(partial[..., recv_idx, :], incoming)
 
         # After RS, rank r owns reduced chunk r on the chunk axis
         my_share = partial[..., r, :]
 
         # ---- All-gather (circulate reduced chunks) ----
-        gathered = self.all_gather(me, my_share, f"all_reduce_gather_{id}")
+        gathered = self.all_gather(me, my_share, f"{self.name}_all_reduce_gather_{id}")
         # `gathered` should be ordered by rank 0..P-1; concatenate along last axis
         result = torch.cat(gathered, axis=-1)
         return result
