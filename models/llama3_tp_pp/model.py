@@ -9,6 +9,7 @@
 # This software may be used and distributed in accordance with the terms of the Llama 3 Community License Agreement.
 
 import math
+from time import perf_counter
 from typing import Optional, Tuple
 
 import fairscale.nn.model_parallel.initialize as fs_init
@@ -459,7 +460,27 @@ def pp_send(me: Device, data, target_rank: int):
         # print(f"SEND: my global rank={dist.get_rank()}, pp_ranks={pp_ranks}, target_rank={target_rank}, dst_global={pp_ranks[target_rank]}")
         # print(f"Sent data shape: {data.shape}, dtype={data.dtype}, device={data.device}")
 
+        me.world.event_logger.log_event(
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_start",
+                "op": "pp_send",
+                "size": data.element_size() * data.nelement(),
+            }
+        )
+
+        start = perf_counter()
         dist.send(data.cpu(), dst=get_pipeline_parallel_ranks()[target_rank], group=group)
+        end = perf_counter()
+
+        me.world.event_logger.log_event(
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_end",
+                "op": "pp_send",
+                "duration": end - start,
+            }
+        )
         return
 
     rank = get_pp_rank(me)
@@ -482,7 +503,28 @@ def pp_recv(me: Device, source_rank: int, tokens: torch.Tensor, params):
         # print(f"RECV: group={group}, group.size()={group.size()}")
         # print(f"Receiving data shape: {data.shape}, dtype={data.dtype}, device={data.device}")
 
+        me.world.event_logger.log_event(
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_start",
+                "op": "pp_recv",
+                "size": data.element_size() * data.nelement(),
+            }
+        )
+
+        start = perf_counter()
         dist.recv(data, src=get_pipeline_parallel_ranks()[source_rank], group=group)
+        end = perf_counter()
+
+        me.world.event_logger.log_event(
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_end",
+                "op": "pp_recv",
+                "duration": end - start,
+            }
+        )
+
         data = data.to(tokens.device)
         return data
 
@@ -500,7 +542,27 @@ def pp_broadcast(me: Device, data, source_rank: int):
         # print(f"Device {me.name} broadcasting data from PP rank {source_rank}...")
         # print(f"Shape: {data.shape}, dtype={data.dtype}, device={data.device}")
 
+        me.world.event_logger.log_event(
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_start",
+                "op": "pp_broadcast",
+                "size": data.element_size() * data.nelement(),
+            }
+        )
+
+        start = perf_counter()
         dist.broadcast(data, src=get_pipeline_parallel_ranks()[source_rank], group=group)
+        end = perf_counter()
+
+        me.world.event_logger.log_event(
+            {
+                "time": me.state.sync_clock(),
+                "action": "transmit_end",
+                "op": "pp_broadcast",
+                "duration": end - start,
+            }
+        )
         return data
 
     rank = get_pp_rank(me)
