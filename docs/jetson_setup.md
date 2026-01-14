@@ -76,6 +76,10 @@ unset CUDA_VERSION
 
 Also make sure you modify `pyproject.toml` to replace torch constraint with the jetson-ai-lab fork,
 
+```shell
+uv python pin 3.10
+```
+
 ```toml
-"torch @ https://pypi.jetson-ai-lab.io/jp6/cu126/+f/590/92ab729aee2b8/torch-2.8.0-cp310-cp310-linux_aarch64.whl#sha256=59092ab729aee2b8937d80cc1b35d1128275bd02a7e1bc911e7efa375bd97226",
+"torch @ https://pypi.jetson-ai-lab.io/jp6/cu126/+f/62a/1beee9f2f1470/torch-2.8.0-cp310-cp310-linux_aarch64.whl#sha256=62a1beee9f2f147076a974d2942c90060c12771c94740830327cae705b2595fc",
 ```

@@ -459,7 +459,7 @@ def pp_send(me: Device, data, target_rank: int):
         # print(f"SEND: my global rank={dist.get_rank()}, pp_ranks={pp_ranks}, target_rank={target_rank}, dst_global={pp_ranks[target_rank]}")
         # print(f"Sent data shape: {data.shape}, dtype={data.dtype}, device={data.device}")
 
-        dist.send(data, dst=get_pipeline_parallel_ranks()[target_rank], group=group)
+        dist.send(data.cpu(), dst=get_pipeline_parallel_ranks()[target_rank], group=group)
         return
 
     rank = get_pp_rank(me)
@@ -475,7 +475,7 @@ def pp_recv(me: Device, source_rank: int, tokens: torch.Tensor, params):
         pp_ranks = get_pipeline_parallel_ranks()
 
         shape = (tokens.shape[0], tokens.shape[1], params.dim)
-        data = torch.empty(shape, dtype=torch.bfloat16, device=tokens.device)
+        data = torch.empty(shape, dtype=torch.bfloat16, device="cpu")
 
         # print(f"Device {me.name} receiving data from PP rank {source_rank}...")
         # print(f"RECV: my global rank={dist.get_rank()}, pp_ranks={pp_ranks}, source_rank={source_rank}, src_global={pp_ranks[source_rank]}")
@@ -483,6 +483,7 @@ def pp_recv(me: Device, source_rank: int, tokens: torch.Tensor, params):
         # print(f"Receiving data shape: {data.shape}, dtype={data.dtype}, device={data.device}")
 
         dist.recv(data, src=get_pipeline_parallel_ranks()[source_rank], group=group)
+        data = data.to(tokens.device)
         return data
 
     rank = get_pp_rank(me)
