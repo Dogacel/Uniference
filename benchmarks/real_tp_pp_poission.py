@@ -9,8 +9,12 @@ from programs.pipeline_tensor_parallel_poisson_program import PipelineTensorPara
 from models.datatypes import RawMessage
 import argparse
 import numpy as np
+import time
+
+from simsuite.world import World
 
 def generate_poisson_messages(
+    world: World,
     duration: float = 30.0,  # seconds
     rate: float = 10.0,      # messages per second (lambda)
     seed: int = 42,
@@ -22,14 +26,15 @@ def generate_poisson_messages(
 
     # Generate inter-arrival times (exponential distribution)
     messages = []
-    t = 0.0
+    t = time.time() if world.backend == "pytorch" else 0.0
+    end_time = t + duration
 
-    while t < duration:
+    while t < end_time:
         # Time until next message
         inter_arrival = random.exponential(1.0 / rate)
         t += inter_arrival
 
-        if t < duration:
+        if t < end_time:
             messages.append({
                 "timestamp": t,
                 "id": len(messages),
@@ -46,6 +51,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("output_file", nargs="?", default="run_report.json", help="Output file name")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for generation")
     parser.add_argument("--pp_size", type=int, default=2, help="Pipeline parallel size")
+    parser.add_argument("--debug_run", action="store_true", help="Enable debug run")
     parsed_args = parser.parse_args(args)
 
     device_count = parsed_args.device_count
@@ -55,7 +61,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     prompt = load_prompt("checkpoints/prompt_5000.txt")
 
     text_lengths = [256] # [8, 16, 32, 64, 128, 256, 512]
-    max_tokens = [8] # [1, 4, 8, 16, 32, 64]
+    max_tokens = [1] # [1, 4, 8, 16, 32, 64]
     repeats = 1
 
     world = setup_world(
@@ -65,6 +71,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         output_file=output_file,
         program=lambda **kwargs: PipelineTensorParallelPoissonProgram(**kwargs),
         batch_size=batch_size,
+        world_kwargs={"debug_run": parsed_args.debug_run}
     )
 
     # Generate Cartesian product
@@ -92,11 +99,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             device.program.max_tokens = max_tokens
 
             world.inputs = generate_poisson_messages(
+                world,
                 duration=10.0,
                 rate=5.0,
                 prompt=prompt,
                 min_prompt_length=8,
-                max_prompt_length=128,
+                max_prompt_length=sequence_length,
             )
 
         world.run()

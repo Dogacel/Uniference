@@ -8,6 +8,7 @@ from termcolor import cprint
 
 from models.datatypes import RawMessage
 from models.llama3_tp_pp.generation import Llama3
+from models.llama3_tp_pp.model import pp_broadcast, get_pp_rank, get_tp_rank
 
 import os
 import torch
@@ -131,8 +132,6 @@ class PipelineTensorParallelPoissonProgram(Program):
                     break
             print("\n")
 
-        start_time = time.time() if world.backend == "pytorch" else me.state.sync_clock()
-
         all_messages = me.world.inputs
 
         delays = []
@@ -141,11 +140,13 @@ class PipelineTensorParallelPoissonProgram(Program):
             torch.distributed.barrier()
 
             now = time.time() if world.backend == "pytorch" else me.state.sync_clock()
+            # Make sure all devices get the same view of all_messages
 
             visible_messages = [msg for msg in all_messages if msg["timestamp"] <= now]
             all_messages = [msg for msg in all_messages if msg["timestamp"] > now]
 
             print(f"Total messages in queue: {len(all_messages)}. Visible messages: {len(visible_messages)}")
+            print(f"Device {me.name} processing {len(visible_messages)} messages.")
 
             if len(visible_messages) == 0:
                 time.sleep(0.1)

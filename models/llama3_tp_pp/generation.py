@@ -29,7 +29,7 @@ from ..checkpoint import maybe_reshard_state_dict
 from ..datatypes import GenerationResult, QuantizationMode, RawContent, RawMessage, ToolPromptFormat
 from .args import ModelArgs
 from .chat_format import ChatFormat, LLMInput
-from .model import Transformer
+from .model import Transformer, get_pp_size, pp_broadcast
 from .tokenizer import Tokenizer
 
 
@@ -249,18 +249,27 @@ class Llama3:
             else:
                 logits = self.model.forward(tokens[:, :cur_pos], prev_pos)
 
-            if logits_processor is not None:
-                logits = logits_processor(tokens[:, :cur_pos], logits)
+            # Output is not coming from this pipeline stage
+            if logits is not None:
+                if logits_processor is not None:
+                    logits = logits_processor(tokens[:, :cur_pos], logits)
 
-            if temperature > 0:
-                probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
-                next_token = sample_top_p(probs, top_p)
+                if temperature > 0:
+                    probs = torch.softmax(logits[:, -1] / temperature, dim=-1)
+                    next_token = sample_top_p(probs, top_p)
+                else:
+                    next_token = torch.argmax(logits[:, -1], dim=-1)
+
+                next_token = next_token.reshape(-1)
+                # only replace token if prompt has already been generated
+                next_token = torch.where(input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token)
             else:
-                next_token = torch.argmax(logits[:, -1], dim=-1)
+                next_token = torch.zeros((tokens.shape[0]), dtype=tokens.dtype, device=tokens.device)
+            # TODO: Enable this for auto-regressive generation with PP
+            #       A broadcast prevents proper pipelining by creating bubbles
+            if max_gen_len == 1:
+                next_token = pp_broadcast(self.args.me, next_token, source_rank=get_pp_size(self.args.me) - 1)
 
-            next_token = next_token.reshape(-1)
-            # only replace token if prompt has already been generated
-            next_token = torch.where(input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token)
             tokens[:, cur_pos] = next_token
 
             target = tokens[:, prev_pos + 1 : cur_pos + 1]

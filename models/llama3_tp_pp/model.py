@@ -425,9 +425,9 @@ class Transformer(nn.Module):
         if my_rank == world_size - 1:
             h = self.norm(h)
             output = self.output(h).float()
-            result = pp_broadcast(self.params.me, output, source_rank=my_rank)
+            # result = pp_broadcast(self.params.me, output, source_rank=my_rank)
             # print(f"Device {self.params.me.name} broadcasting final output from PP rank {my_rank}.")
-            return result
+            return output
         else:
             # Send to next rank
             pp_send(self.params.me, h, target_rank=my_rank + 1)
@@ -438,9 +438,9 @@ class Transformer(nn.Module):
             dtype=torch.float32,
             device=h.device
         )
-        result = pp_broadcast(self.params.me, data, source_rank=world_size - 1)
+        # result = pp_broadcast(self.params.me, data, source_rank=world_size - 1)
         # print(f"Device {self.params.me.name} received final output from PP rank {world_size - 1}.")
-        return result
+        return None
 
 from fairscale.nn.model_parallel.initialize import (
     get_model_parallel_world_size, 
