@@ -32,12 +32,12 @@ def setup_world(
     program: Callable[..., Program],
     batch_size: int = 1,
     program_kwargs: dict = {},
-    network_params=[0.0001, 1.02e-11],
+    network_params=[0.002, 7.5e-9],
     world_kwargs: dict = {},
 ) -> World:
     world = World(output_file=output_file, **world_kwargs)
 
-    device_spec = DeviceSpec()
+    device_spec = DeviceSpec(speed_scale=3.0)
 
     devices = []
     for i in range(device_count):

@@ -15,6 +15,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--device_count", type=int, default=1, help="Number of devices")
     parser.add_argument("output_file", nargs="?", default="run_report.json", help="Output file name")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for generation")
+    parser.add_argument("--debug_run", action="store_true", help="Enable debug run mode")
     parsed_args = parser.parse_args(args)
 
     device_count = parsed_args.device_count
@@ -23,9 +24,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     batch_size = parsed_args.batch_size
     prompt = load_prompt("checkpoints/prompt_5000.txt")
 
-    text_lengths = [32] # [8, 16, 32, 64, 128, 256, 512]
-    max_tokens = [1] # [1, 4, 8, 16, 32, 64]
-    repeats = 1
+    text_lengths = [32, 128, 512] # [8, 16, 32, 64, 128, 256, 512]
+    max_tokens = [1, 16] # [1, 4, 8, 16, 32, 64]
+    repeats = 5
 
     world = setup_world(
         device_count=device_count,
@@ -34,6 +35,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         output_file=output_file,
         program=lambda **kwargs: PipelineTensorParallelProgram(**kwargs),
         batch_size=batch_size,
+        world_kwargs={"debug_run": parsed_args.debug_run},
     )
 
     # Generate Cartesian product

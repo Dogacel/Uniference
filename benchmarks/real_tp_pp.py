@@ -25,9 +25,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     batch_size = parsed_args.batch_size
     prompt = load_prompt("checkpoints/prompt_5000.txt")
 
-    text_lengths = [256] # [8, 16, 32, 64, 128, 256, 512]
-    max_tokens = [8] # [1, 4, 8, 16, 32, 64]
-    repeats = 1
+    text_lengths = [64, 128, 256, 512] # [8, 16, 32, 64, 128, 256, 512]
+    max_tokens = [1, 8, 32] # [1, 4, 8, 16, 32, 64]
+    repeats = 5
 
     world = setup_world(
         device_count=device_count,

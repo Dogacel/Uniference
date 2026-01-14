@@ -29,7 +29,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     world = setup_world(
         device_count=device_count,
-        tp_size=device_count,
+        pp_size=1,
         seq_len=8192,
         output_file=output_file,
         program=lambda **kwargs: TensorParallelProgram(**kwargs),

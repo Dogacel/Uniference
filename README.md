@@ -95,12 +95,13 @@ ip -4 addr show scope global | grep inet
 Later, save this value and set the following variables for each device, including the leader.
 
 ```shell
-export MASTER_ADDR=192.168.2.103
+export MASTER_ADDR=192.168.1.14
 export MASTER_PORT=25001
 # Use the ifsocket you use to connect devices to each other.
 export GLOO_SOCKET_IFNAME=enP8p1s0
 # Set simulation backend to pytorch
 export WORLD_BACKEND=pytorch
+export DEVICE=cuda
 ```
 
 Based on your deployment size, you should set the world_size and rank. Make sure each device has a distinct rank.
