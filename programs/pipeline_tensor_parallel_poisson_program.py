@@ -195,3 +195,9 @@ class PipelineTensorParallelPoissonProgram(Program):
 
         print(f"Average delay: {sum(delays)/len(delays):.4f} seconds over {len(delays)} messages.")
         print(f"Average processing time per batch: {sum(measurements)/len(measurements):.4f} seconds over {len(measurements)} batches.")
+
+        # One last sync to let all devices exit
+        if get_pp_rank(me) == 0:
+            pp_send(me, now, target_rank=1)
+        else:
+            now = pp_recv(me, source_rank=0, shape=(1,), dtype=torch.float32)
