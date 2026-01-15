@@ -9,6 +9,7 @@
 # This software may be used and distributed in accordance with the terms of the Llama 3 Community License Agreement.
 
 import math
+import os
 from time import perf_counter
 from typing import Optional, Tuple
 
@@ -367,6 +368,15 @@ class Transformer(nn.Module):
             if isinstance(layer, TransformerBlock):
                 layer.clean_cache()
 
+    def get_device(self):
+        if "DEVICE" in os.environ:
+            return os.environ["DEVICE"]
+        if torch.cuda.is_available():
+            return "cuda"
+        elif torch.xpu.is_available():
+            return "xpu"
+        return "cpu"
+
     @torch.inference_mode()
     def forward(self, tokens: torch.Tensor, start_pos: int):
         my_rank = get_pp_rank(self.params.me)
@@ -381,11 +391,18 @@ class Transformer(nn.Module):
         else:
             # Receive hidden states from previous rank
             # print(f"Device {self.params.me.name} waiting to receive input from previous PP rank {my_rank - 1}...")
+            shape = pp_recv(
+                self.params.me, 
+                source_rank=my_rank - 1,
+                shape=(3),
+                dtype=torch.int64,
+            )
+            shape = (shape[0], shape[1], shape[2])
             h = pp_recv(
                 self.params.me, 
                 source_rank=my_rank - 1,
-                tokens=tokens,
-                params=self.params,
+                shape=shape,
+                device=self.get_device(),
             )
             _bsz, seqlen, _ = h.shape
             # print(f"Device {self.params.me.name} received input from previous PP rank {my_rank - 1}.")
@@ -431,14 +448,15 @@ class Transformer(nn.Module):
             return output
         else:
             # Send to next rank
+            pp_send(self.params.me, torch.tensor(h.shape, device=h.device), target_rank=my_rank + 1)
             pp_send(self.params.me, h, target_rank=my_rank + 1)
             # print(f"Device {self.params.me.name} sent output to next PP rank {my_rank + 1}.")
 
-        data = torch.empty(
-            (h.shape[0], h.shape[1], self.params.vocab_size),
-            dtype=torch.float32,
-            device=h.device
-        )
+        # data = torch.empty(
+        #     (h.shape[0], h.shape[1], self.params.vocab_size),
+        #     dtype=torch.float32,
+        #     device=h.device
+        # )
         # result = pp_broadcast(self.params.me, data, source_rank=world_size - 1)
         # print(f"Device {self.params.me.name} received final output from PP rank {world_size - 1}.")
         return None
@@ -491,13 +509,13 @@ def pp_send(me: Device, data, target_rank: int):
 
     me.pp_chan().send(me, data, f"pp_send_{rank}_{target_rank}_{tp_rank}", target_device)
 
-def pp_recv(me: Device, source_rank: int, tokens: torch.Tensor, params):
+
+def pp_recv(me: Device, source_rank: int, shape, dtype=torch.bfloat16, device="cpu"):
     if me.world.backend == "pytorch":
         group = get_pipeline_parallel_group()
         pp_ranks = get_pipeline_parallel_ranks()
 
-        shape = (tokens.shape[0], tokens.shape[1], params.dim)
-        data = torch.empty(shape, dtype=torch.bfloat16, device="cpu")
+        data = torch.empty(shape, dtype=dtype, device="cpu")
 
         # print(f"Device {me.name} receiving data from PP rank {source_rank}...")
         # print(f"RECV: my global rank={dist.get_rank()}, pp_ranks={pp_ranks}, source_rank={source_rank}, src_global={pp_ranks[source_rank]}")
@@ -526,7 +544,7 @@ def pp_recv(me: Device, source_rank: int, tokens: torch.Tensor, params):
             }
         )
 
-        data = data.to(tokens.device)
+        data = data.to(device)
         return data
 
     rank = get_pp_rank(me)

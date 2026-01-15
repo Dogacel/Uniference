@@ -21,12 +21,13 @@ def generate_poisson_messages(
     prompt: str = "",
     min_prompt_length: int = 8,
     max_prompt_length: int = 128,
+    t: float = 0.0,
 ):
     random = np.random.RandomState(42)
 
     # Generate inter-arrival times (exponential distribution)
     messages = []
-    t = time.time() if world.backend == "pytorch" else 0.0
+    
     end_time = t + duration
 
     while t < end_time:

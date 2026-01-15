@@ -8,7 +8,7 @@ from termcolor import cprint
 
 from models.datatypes import RawMessage
 from models.llama3_tp_pp.generation import Llama3
-from models.llama3_tp_pp.model import pp_broadcast, get_pp_rank, get_tp_rank
+from models.llama3_tp_pp.model import pp_broadcast, get_pp_rank, get_tp_rank, pp_recv, pp_send
 
 import os
 import torch
@@ -76,6 +76,8 @@ class PipelineTensorParallelPoissonProgram(Program):
         me = self.me
         model = self.model
 
+        me.world.chan("time").subscribe(me)
+
         print(f"Device {me.name} warming up...")
         print(f"[{me.name}] Generating 20 tokens for warmup...")
         result = ""
@@ -107,10 +109,11 @@ class PipelineTensorParallelPoissonProgram(Program):
 
             generated_token_count = 0
 
-            if me.pp_rank != 0:
-                for i in range(max_gen_len):
-                    model.model.forward(None, 0)
-                return
+            # pp_rank != 0 doesn't know when to stop generation, so we just run max_gen_len steps
+            # if me.pp_rank != 0:
+            #     for i in range(max_gen_len):
+            #         model.model.forward(None, 0)
+            #     return
 
             for token_results in model.chat_completion(
                 batch,
@@ -119,7 +122,6 @@ class PipelineTensorParallelPoissonProgram(Program):
                 max_gen_len=max_gen_len,
             ):
                 result = token_results[0]
-                print(len(token_results))
                 generated_token_count += 1
 
                 world.event_logger.log_event(
@@ -142,11 +144,23 @@ class PipelineTensorParallelPoissonProgram(Program):
 
         delays = []
 
-        while len(all_messages) > 0:
-            now = time.time() if world.backend == "pytorch" else me.state.sync_clock()
-            # Make sure all devices get the same view of all_messages
+        start_time = 0
 
-            now = torch.tensor(now).to("cpu")
+        while len(all_messages) > 0:
+            now = (time.time() if world.backend == "pytorch" else me.state.sync_clock()) - start_time
+
+            now = torch.tensor([now], dtype=torch.float32, device="cpu")
+            if get_pp_rank(me) == 0:
+                pp_send(me, now, target_rank=1)
+            else:
+                now = pp_recv(me, source_rank=0, shape=(1,), dtype=torch.float32)
+
+            if start_time == 0:
+                start_time = now.item()
+
+            print(f"{me.state.sync_clock()}: Device {me.name} synced time: {now.item():.4f} seconds.")
+
+            # Make sure all devices get the same view of all_messages
 
             visible_messages = [msg for msg in all_messages if msg["timestamp"] <= now]
             all_messages = [msg for msg in all_messages if msg["timestamp"] > now]
@@ -169,7 +183,7 @@ class PipelineTensorParallelPoissonProgram(Program):
                 evaluate(model, dialogs)
                 model.clean_cache()
 
-            end_time = time.time() if world.backend == "pytorch" else me.state.sync_clock()
+            end_time = (time.time() if world.backend == "pytorch" else me.state.sync_clock()) - start_time
 
             for msg in visible_messages:
                 delays.append(end_time - msg["timestamp"])
