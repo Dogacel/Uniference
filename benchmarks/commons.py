@@ -37,7 +37,7 @@ def setup_world(
 ) -> World:
     world = World(output_file=output_file, **world_kwargs)
 
-    device_spec = DeviceSpec(speed_scale=1.2)
+    device_spec = DeviceSpec(speed_scale=1.0)
 
     devices = []
     for i in range(device_count):

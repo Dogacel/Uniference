@@ -244,7 +244,9 @@ class World:
                 (
                     device.state.clock
                     for device in self.devices
-                    if not device.terminated and device.state.dependency is None
+                    if not device.terminated and (
+                        (device.state.dependency is None or hasattr(device.state.dependency, "completed") and device.state.dependency.completed()) 
+                    )
                 ),
                 default=float("inf"),
             )

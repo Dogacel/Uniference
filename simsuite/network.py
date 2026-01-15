@@ -177,8 +177,8 @@ class Network:
         available_transmits = [
             t
             for t in self.transmits
-            # This line behaves weird for async_ops, so change != to == while running async benchmark
-            if t.start_time <= self.internal_clock and ((not t.completed()) or t.target_device.state.dependency == t)
+            # This line behaves weird for async_ops, so try changing != to == while running async benchmark
+            if t.start_time <= self.internal_clock and ((not t.completed()) or t.target_device.state.dependency != t)
         ]
         # print(f"Available transmits: {available_transmits}")
         first_to_end = min(available_transmits, key=end_time, default=None)
