@@ -267,8 +267,11 @@ class World:
             # Only simulate the device that has the lowest clock time and is runnable.
             # If the device is at max_time, it can only run if every other device is also at max_time.
             other_device_times = [
-                d.state.clock for d in self.devices if d != device and not d.terminated and d.state.dependency is None
+                d.state.clock for d in self.devices 
+                if d != device and not d.terminated and (d.state.dependency is None or hasattr(d.state.dependency, "completed") and d.state.dependency.completed()) 
             ]
+
+            dprint(f"Simulating device {device.name} at time {state.clock}, other device times: {other_device_times}")
             if state.clock == self.max_time and not all(t == self.max_time for t in other_device_times):
                 dprint(f"Device {device.name} at max_time {self.max_time} but others are not: {other_device_times}")
                 self._runq.append((device, g))
