@@ -101,7 +101,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
             world.inputs = generate_poisson_messages(
                 world,
-                duration=10.0,
+                duration=3.0,
                 rate=5.0,
                 prompt=prompt,
                 min_prompt_length=8,

@@ -32,7 +32,7 @@ def setup_world(
     program: Callable[..., Program],
     batch_size: int = 1,
     program_kwargs: dict = {},
-    network_params=[0.001, 1.72e-9],
+    network_params=[0.001, 1e-9],
     world_kwargs: dict = {},
 ) -> World:
     world = World(output_file=output_file, **world_kwargs)
