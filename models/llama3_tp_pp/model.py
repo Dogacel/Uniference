@@ -374,9 +374,9 @@ class Transformer(nn.Module):
 
         # print(f"Device {self.params.me.name} starting forward pass at PP rank {my_rank}/{world_size}...")
 
-        _bsz, seqlen = tokens.shape
 
         if my_rank == 0:
+            _bsz, seqlen = tokens.shape
             h = self.tok_embeddings(tokens)
         else:
             # Receive hidden states from previous rank
@@ -387,6 +387,7 @@ class Transformer(nn.Module):
                 tokens=tokens,
                 params=self.params,
             )
+            _bsz, seqlen, _ = h.shape
             # print(f"Device {self.params.me.name} received input from previous PP rank {my_rank - 1}.")
 
         self.freqs_cis = self.freqs_cis.to(h.device)
@@ -398,7 +399,7 @@ class Transformer(nn.Module):
 
         mask = None
         if seqlen > 1:
-            mask = torch.full((seqlen, seqlen), float("-inf"), device=tokens.device)
+            mask = torch.full((seqlen, seqlen), float("-inf"), device=h.device)
 
             mask = torch.triu(mask, diagonal=1)
 
@@ -413,9 +414,9 @@ class Transformer(nn.Module):
             # (seqlen, cache_len + seqlen), and the only masked entries are (i, j) for
             # j > cache_len + i, since row i corresponds to token cache_len + i.
             if self.use_kv_cache:
-                mask = torch.hstack([torch.zeros((seqlen, start_pos), device=tokens.device), mask]).type_as(h)
+                mask = torch.hstack([torch.zeros((seqlen, start_pos), device=h.device), mask]).type_as(h)
             else:
-                mask = mask.to(tokens.device)
+                mask = mask.to(h.device)
 
         for i, layer in enumerate(self.layers):
             # print(f"Device {self.params.me.name} processing layer {my_rank * (self.params.n_layers // world_size) + i}/{self.params.n_layers}...")

@@ -265,9 +265,8 @@ class Llama3:
                 next_token = torch.where(input_text_mask[:, cur_pos], tokens[:, cur_pos], next_token)
             else:
                 next_token = torch.zeros((tokens.shape[0]), dtype=tokens.dtype, device=tokens.device)
-            # TODO: Enable this for auto-regressive generation with PP
-            #       A broadcast prevents proper pipelining by creating bubbles
-            if max_gen_len == 1:
+
+            if max_gen_len != 1:
                 next_token = pp_broadcast(self.args.me, next_token, source_rank=get_pp_size(self.args.me) - 1)
 
             tokens[:, cur_pos] = next_token

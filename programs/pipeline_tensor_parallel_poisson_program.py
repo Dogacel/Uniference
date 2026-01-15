@@ -98,6 +98,7 @@ class PipelineTensorParallelPoissonProgram(Program):
         world = self.me.world
         me = self.me
         model = self.model
+        max_gen_len = 1
 
         # Non client machines will be listening for cache updates
 
@@ -106,11 +107,16 @@ class PipelineTensorParallelPoissonProgram(Program):
 
             generated_token_count = 0
 
+            if me.pp_rank != 0:
+                for i in range(max_gen_len):
+                    model.model.forward(None, 0)
+                return
+
             for token_results in model.chat_completion(
                 batch,
                 temperature=self.temperature,
                 top_p=self.top_p,
-                max_gen_len=self.max_seq_len,
+                max_gen_len=max_gen_len,
             ):
                 result = token_results[0]
                 print(len(token_results))
@@ -137,10 +143,10 @@ class PipelineTensorParallelPoissonProgram(Program):
         delays = []
 
         while len(all_messages) > 0:
-            torch.distributed.barrier()
-
             now = time.time() if world.backend == "pytorch" else me.state.sync_clock()
             # Make sure all devices get the same view of all_messages
+
+            now = torch.tensor(now).to("cpu")
 
             visible_messages = [msg for msg in all_messages if msg["timestamp"] <= now]
             all_messages = [msg for msg in all_messages if msg["timestamp"] > now]
