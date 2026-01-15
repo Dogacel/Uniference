@@ -143,6 +143,7 @@ class PipelineTensorParallelPoissonProgram(Program):
         all_messages = me.world.inputs
 
         delays = []
+        measurements = []
 
         start_time = 0
 
@@ -180,7 +181,9 @@ class PipelineTensorParallelPoissonProgram(Program):
 
             for batch in batches:
                 dialogs = [[RawMessage(role="user", content=msg["content"])] for msg in batch]
+                start = time.time() if world.backend == "pytorch" else me.state.sync_clock()
                 evaluate(model, dialogs)
+                measurements.append((time.time() if world.backend == "pytorch" else me.state.sync_clock()) - start)
                 model.clean_cache()
 
             end_time = (time.time() if world.backend == "pytorch" else me.state.sync_clock()) - start_time
@@ -191,3 +194,4 @@ class PipelineTensorParallelPoissonProgram(Program):
             time.sleep(0.1)
 
         print(f"Average delay: {sum(delays)/len(delays):.4f} seconds over {len(delays)} messages.")
+        print(f"Average processing time per batch: {sum(measurements)/len(measurements):.4f} seconds over {len(measurements)} batches.")
