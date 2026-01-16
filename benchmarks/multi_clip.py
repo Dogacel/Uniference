@@ -20,6 +20,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parsed_args = parser.parse_args(args)
 
     output_file = "results/" + parsed_args.output_file
+    device_count = parsed_args.device_count
 
     world = World(output_file=output_file)
 
@@ -36,14 +37,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         device.pp_chan().subscribe(device)
         return device
 
-    global device0, device1
-
-    device0 = get_device(0)
-    device1 = get_device(1)
+    devices = []
+    for i in range(device_count):
+        devices.append(get_device(i))
 
     world.network(
         NetworkArgs(
-            devices=[device0, device1],
+            devices=devices,
             network_params=[0.0, 1e-6],
         )
     )
