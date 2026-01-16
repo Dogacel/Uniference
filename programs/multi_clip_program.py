@@ -47,7 +47,9 @@ class MultiClipProgram(Program):
         if device is not Device:
             device = torch.device(device)
 
+
         if not torch.distributed.is_initialized():
+            print("Initializing torch.distributed...")
             if device.type == "cuda":
                 backend = os.environ.get("DIST_BACKEND", "nccl")
                 torch.distributed.init_process_group(backend)
@@ -55,6 +57,7 @@ class MultiClipProgram(Program):
                 torch.distributed.init_process_group("gloo")
 
         if not model_parallel_is_initialized():
+            print("Initializing model parallel...")
             world_size = int(os.environ.get("WORLD_SIZE", 1))
             pp_size = int(os.environ.get("PP_SIZE", 1))
             initialize_model_parallel(
