@@ -279,6 +279,10 @@ class World:
                 self._runq.append((device, g))
                 continue
 
+            # Make sure dependency is registered
+            if state.dependency and isinstance(state.dependency, str):
+                state.dependency = self.networks[0].search_transmit(state.dependency)
+
             dependency_completed = hasattr(state.dependency, "completed") and state.dependency.completed()
             if dependency_completed:
                 dprint(f"Device {device.name} dependency completed: {state.dependency}")
