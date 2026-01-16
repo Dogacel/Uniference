@@ -110,10 +110,10 @@ class PipelineTensorParallelPoissonProgram(Program):
             generated_token_count = 0
 
             # pp_rank != 0 doesn't know when to stop generation, so we just run max_gen_len steps
-            if me.pp_rank != 0:
-                for i in range(max_gen_len):
-                    model.model.forward(None, 0)
-                return
+            # if me.pp_rank != 0:
+            #     for i in range(max_gen_len):
+            #         model.model.forward(None, 0)
+            #     return
 
             for token_results in model.chat_completion(
                 batch,

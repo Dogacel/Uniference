@@ -61,7 +61,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     batch_size = parsed_args.batch_size
     prompt = load_prompt("checkpoints/prompt_5000.txt")
 
-    text_lengths = [256] # [8, 16, 32, 64, 128, 256, 512]
+    text_lengths = [2048] # [8, 16, 32, 64, 128, 256, 512]
     max_tokens = [1] # [1, 4, 8, 16, 32, 64]
     repeats = 1
 

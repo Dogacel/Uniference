@@ -32,12 +32,12 @@ def setup_world(
     program: Callable[..., Program],
     batch_size: int = 1,
     program_kwargs: dict = {},
-    network_params=[0.001, 1e-9],
+    network_params=[0.0001, 9e-9],
     world_kwargs: dict = {},
 ) -> World:
     world = World(output_file=output_file, **world_kwargs)
 
-    device_spec = DeviceSpec(speed_scale=1.4)
+    device_spec = DeviceSpec(speed_scale=1.0)
 
     devices = []
     for i in range(device_count):
@@ -59,7 +59,7 @@ def setup_world(
         device = world.device(
             deviceArgs=DeviceArgs(spec=device_spec, client=True, name=f"phone_{i + 1}"),
             program=program(
-                ckpt_dir="./checkpoints/Llama-3.2-1B-Instruct/original",
+                ckpt_dir="./checkpoints/Llama-3.1-8B-Instruct/original",
                 temperature=0.0,
                 top_p=1.0,
                 max_seq_len=seq_len,

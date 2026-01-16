@@ -468,7 +468,16 @@ from fairscale.nn.model_parallel.initialize import (
     get_pipeline_parallel_ranks,
 )
 import torch.distributed as dist
+import threading
 
+def background_wait(req, tensor_ref):
+    """
+    Waits for the request to finish in the background.
+    tensor_ref is passed just to ensure the tensor isn't garbage collected 
+    before the send completes.
+    """
+    req.wait()
+    # Optional: print(f"Finished sending tensor of shape {tensor_ref.shape}")
 
 def pp_send(me: Device, data, target_rank: int):
     if me.world.backend == "pytorch":
@@ -489,7 +498,14 @@ def pp_send(me: Device, data, target_rank: int):
         )
 
         start = perf_counter()
-        dist.send(data.cpu(), dst=get_pipeline_parallel_ranks()[target_rank], group=group)
+        # print(f"Device {me.name} is sending data to PP rank {target_rank} (global rank {pp_ranks[target_rank]})...")
+        data_to_send = data.clone().cpu()
+        req = dist.isend(data_to_send, dst=get_pipeline_parallel_ranks()[target_rank], group=group)
+
+        t = threading.Thread(target=background_wait, args=(req, data_to_send))
+        t.start()
+
+        # print(f"Device {me.name} sent data to PP rank {target_rank} (global rank {pp_ranks[target_rank]}).")
         end = perf_counter()
 
         me.world.event_logger.log_event(
@@ -507,7 +523,7 @@ def pp_send(me: Device, data, target_rank: int):
 
     target_device = me.world.chan(f"pp_{target_rank}").subscribers[tp_rank]
 
-    me.pp_chan().send(me, data, f"pp_send_{rank}_{target_rank}_{tp_rank}", target_device)
+    me.pp_chan().send(me, data.cpu(), f"pp_send_{rank}_{target_rank}_{tp_rank}", target_device)
 
 
 def pp_recv(me: Device, source_rank: int, shape, dtype=torch.bfloat16, device="cpu"):
@@ -532,8 +548,13 @@ def pp_recv(me: Device, source_rank: int, shape, dtype=torch.bfloat16, device="c
         )
 
         start = perf_counter()
+        # print(f"Device {me.name} is receiving data from PP rank {source_rank} (global rank {pp_ranks[source_rank]})...")
         dist.recv(data, src=get_pipeline_parallel_ranks()[source_rank], group=group)
+        # print(f"Device {me.name} received data from PP rank {source_rank} (global rank {pp_ranks[source_rank]}).")
         end = perf_counter()
+
+        data_size = data.element_size() * data.nelement()
+        print(f"Device {me.name} received data from PP rank {source_rank} in {end - start:.4f} seconds. Effective bandwidth: {data_size / (end - start) / (1024 ** 2):.2f} MB/s")
 
         me.world.event_logger.log_event(
             {
@@ -550,7 +571,13 @@ def pp_recv(me: Device, source_rank: int, shape, dtype=torch.bfloat16, device="c
     rank = get_pp_rank(me)
     tp_rank = get_tp_rank(me)
 
-    data = me.pp_chan().receive(me, f"pp_send_{source_rank}_{rank}_{tp_rank}")
+    start = me.state.sync_clock()
+    data = me.pp_chan().receive(me, f"pp_send_{source_rank}_{rank}_{tp_rank}").to(device)
+    end = me.state.sync_clock()
+
+    data_size = data.element_size() * data.nelement()
+    # print(f"Device {me.name} received data from PP rank {source_rank} in {end - start:.4f} seconds. Effective bandwidth: {data_size / (end - start) / (1024 ** 2):.2f} MB/s")
+
     return data
 
 def pp_broadcast(me: Device, data, source_rank: int):

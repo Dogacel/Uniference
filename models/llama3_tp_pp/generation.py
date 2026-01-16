@@ -266,8 +266,8 @@ class Llama3:
             else:
                 next_token = torch.zeros((tokens.shape[0]), dtype=tokens.dtype, device=tokens.device)
 
-            if max_gen_len != 1:
-                next_token = pp_broadcast(self.args.me, next_token, source_rank=get_pp_size(self.args.me) - 1)
+            # if max_gen_len != 1:
+            next_token = pp_broadcast(self.args.me, next_token, source_rank=get_pp_size(self.args.me) - 1)
 
             tokens[:, cur_pos] = next_token
 
