@@ -1,0 +1,69 @@
+import sys
+import torch
+
+from typing import Optional, Sequence
+
+import argparse
+
+from programs.multi_clip_program import MultiClipProgram
+from simsuite.device import DeviceArgs, DeviceSpec
+from simsuite.network import NetworkArgs
+from simsuite.world import World, Program, Device
+
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    args = argv[1:] if argv else sys.argv[1:]
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--device_count", type=int, default=1, help="Number of devices")
+    parser.add_argument("output_file", nargs="?", default="run_report.json", help="Output file name")
+    parsed_args = parser.parse_args(args)
+
+    output_file = "results/" + parsed_args.output_file
+
+    world = World(output_file=output_file)
+
+    def get_device(id):
+        device = world.device(
+            deviceArgs=DeviceArgs(spec=DeviceSpec(), client=True, name=f"phone_{id}"),
+            program=MultiClipProgram()
+        )
+        device.tp_group = 0
+        device.pp_rank = id
+        device.pp_size = 2
+
+        device.tp_chan().subscribe(device)
+        device.pp_chan().subscribe(device)
+        return device
+
+    global device0, device1
+
+    device0 = get_device(0)
+    device1 = get_device(1)
+
+    world.network(
+        NetworkArgs(
+            devices=[device0, device1],
+            network_params=[0.0, 1e-6],
+        )
+    )
+
+    world.set_runtime_params(
+        {
+            "device_count": 2,
+            "max_seq_len": 1,
+        }
+    )
+
+    world.run(warmup=True)
+
+    world.run()
+
+    world.destroy()
+
+    return 0
+
+import time
+
+if __name__ == "__main__":
+    sys.exit(main())

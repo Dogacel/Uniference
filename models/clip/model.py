@@ -372,9 +372,12 @@ class CLIP(nn.Module):
         text_features = text_features / text_features.norm(dim=1, keepdim=True)
 
         # cosine similarity as logits
+        start = perf_counter()
         logit_scale = self.logit_scale.exp()
         logits_per_image = logit_scale * image_features @ text_features.t()
         logits_per_text = logits_per_image.t()
+        end = perf_counter()
+        print(f"Logits computation time: {end - start:.4f} seconds")
 
         # shape = [global_batch_size, global_batch_size]
         return logits_per_image, logits_per_text
