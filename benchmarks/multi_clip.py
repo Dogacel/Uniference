@@ -1,5 +1,4 @@
 import sys
-import torch
 
 from typing import Optional, Sequence
 
@@ -8,14 +7,14 @@ import argparse
 from programs.multi_clip_program import MultiClipProgram
 from simsuite.device import DeviceArgs, DeviceSpec
 from simsuite.network import NetworkArgs
-from simsuite.world import World, Program, Device
+from simsuite.world import World
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = argv[1:] if argv else sys.argv[1:]
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device_count", type=int, default=1, help="Number of devices")
+    parser.add_argument("--device_count", type=int, default=2, help="Number of devices")
     parser.add_argument("output_file", nargs="?", default="run_report.json", help="Output file name")
     parsed_args = parser.parse_args(args)
 
@@ -62,8 +61,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     world.destroy()
 
     return 0
-
-import time
 
 if __name__ == "__main__":
     sys.exit(main())

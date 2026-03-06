@@ -17,7 +17,7 @@ from torch import Tensor
 import torch.nn.functional as F
 from torch import nn
 
-from models.llama3_tp.components import ColumnParallelLinearSim, RowParallelLinearSim, VocabParallelEmbeddingSim
+from simsuite.components import ColumnParallelLinearSim, RowParallelLinearSim, VocabParallelEmbeddingSim
 from simsuite.device import Device
 
 from .args import ModelArgs

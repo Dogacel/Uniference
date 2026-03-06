@@ -22,7 +22,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             device_count=device_count,
             seq_len=8192,
             output_file=output_file,
-            program=lambda **kwargs: YieldPerfProgram(**kwargs),
+            program=lambda **kwargs: YieldPerfProgram(input=[prompt], **kwargs),
+            pp_size=1,
         )
 
         combinations = list(itertools.product(yield_probs, text_lengths, range(repeats)))

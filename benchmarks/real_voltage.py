@@ -2,7 +2,7 @@ import fire
 import itertools
 import torch
 
-from commons import load_prompt, get_prompt_sequence_first_n, setup_world
+from commons import load_prompt, setup_world
 from programs.voltage_program import VoltageProgram
 
 from simsuite.units import Gbps, Mbps, ms
@@ -26,10 +26,11 @@ def main(
         device_count=device_count,
         seq_len=max_seq_len,
         output_file=output_file,
-        program=lambda **kwargs: VoltageProgram(**kwargs),
+        program=lambda **kwargs: VoltageProgram(input=[], **kwargs),
         batch_size=1,
         program_kwargs={"model_type": model_type},
         world_kwargs={"debug_run": debug_run},
+        pp_size=1,
     )
 
     # Generate Cartesian product

@@ -1,5 +1,4 @@
 import itertools
-import os
 import sys
 
 from typing import Optional, Sequence
@@ -14,9 +13,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--device_count", type=int, default=4, help="Number of devices")
-    parser.add_argument("output_file", nargs="?", default="run_report.json", help="Output file name")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size for generation")
     parser.add_argument("--pp_size", type=int, default=2, help="Pipeline parallel size")
+    parser.add_argument("--text-lengths", type=int, nargs="+", default=[8, 16, 32, 64, 128, 256, 512], help="List of text lengths to test")
+    parser.add_argument("--max-tokens", type=int, nargs="+", default=[1, 4, 8, 16, 32, 64], help="List of max tokens to test")
+    parser.add_argument("--repeats", type=int, default=5, help="Number of repeats for each combination")
+
+    parser.add_argument("output_file", nargs="?", default="run_report.json", help="Output file name")
     parsed_args = parser.parse_args(args)
 
     device_count = parsed_args.device_count
@@ -25,9 +28,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     batch_size = parsed_args.batch_size
     prompt = load_prompt("checkpoints/prompt_5000.txt")
 
-    text_lengths = [64, 128, 256, 512] # [8, 16, 32, 64, 128, 256, 512]
-    max_tokens = [1, 8, 32] # [1, 4, 8, 16, 32, 64]
-    repeats = 5
+    text_lengths = parsed_args.text_lengths
+    max_tokens = parsed_args.max_tokens
+    repeats = parsed_args.repeats
 
     world = setup_world(
         device_count=device_count,

@@ -1,0 +1,38 @@
+Using backend: simulation
+For 0-th device: tp_group=0, pp_rank=0, pp_size=1
+For 1-th device: tp_group=0, pp_rank=0, pp_size=1
+Initializing device phone_1
+> initializing model parallel with size 1
+> initializing ddp with size 1
+> initializing pipeline with size 1
+Loading a checkpoint (shards=1, current-mp-size=None)
+Assuming current MP rank as the new MP rank: 0
+Loading checkpoint shards:
+[PosixPath('checkpoints/Llama-3.1-8B-Instruct/original/consolidated.00.pth')]
+Setting default device to cpu
+Loading state dict...
+Done...
+Loaded in 1.97 seconds
+Initializing device phone_2
+Loading a checkpoint (shards=1, current-mp-size=None)
+Assuming current MP rank as the new MP rank: 0
+Loading checkpoint shards:
+[PosixPath('checkpoints/Llama-3.1-8B-Instruct/original/consolidated.00.pth')]
+Setting default device to cpu
+Loading state dict...
+Done...
+Loaded in 13.69 seconds
+Device phone_1 is terminated after 4.8832967877388e-05 seconds
+Device phone_2 is terminated after 2.6249908842146397e-06 seconds
+Going to run 1 combinations
+Sequence length: 100, tokens, speed: 1000000000, latency: 0.005, Repeat index: 0
+Device phone_1 is client, sending input
+Start run...
+User: Don't write anything except the answer. Write the next 1000 numbers in this sequence: 1,2,3,4,5,6,7,
+
+8
+
+Device phone_1 is terminated after 8.527849278404306 seconds
+Serve ended
+Device phone_2 is terminated after 8.532371579336985 seconds
+0

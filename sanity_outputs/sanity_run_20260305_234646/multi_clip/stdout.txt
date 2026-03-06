@@ -1,0 +1,18 @@
+Using backend: simulation
+Initializing device phone_0
+Initializing torch.distributed...
+Initializing model parallel...
+> initializing model parallel with size 1
+> initializing ddp with size 1
+> initializing pipeline with size 1
+Initializing device phone_1
+Device phone_0 is image processor
+Device phone_1 is text processor
+Device phone_0 is terminated after 0.34778645902406424 seconds
+Device phone_1 is terminated after 0.3516697079861574 seconds
+Device phone_0 is image processor
+Device phone_1 is text processor
+Label probs: [[0.87543094 0.09621859 0.02835041]]
+Device phone_0 is terminated after 0.3286067909793928 seconds
+Label probs: [[0.87543094 0.09621859 0.02835041]]
+Device phone_1 is terminated after 0.3325131249833889 seconds

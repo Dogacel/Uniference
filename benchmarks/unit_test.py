@@ -1,12 +1,8 @@
-import itertools
 import sys
 import torch
 
 from typing import Optional, Sequence
 
-from commons import load_prompt, get_prompt_sequence_first_n, setup_world
-from programs.tensor_parallel_program import TensorParallelProgram
-from models.datatypes import RawMessage
 import argparse
 
 from simsuite.device import DeviceArgs, DeviceSpec

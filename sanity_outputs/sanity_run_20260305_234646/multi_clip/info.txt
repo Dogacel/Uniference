@@ -1,0 +1,4 @@
+Command: DEVICE=cpu uv run benchmarks/multi_clip.py
+Return Code: 0
+Duration: 10.08s
+Status: PASSED

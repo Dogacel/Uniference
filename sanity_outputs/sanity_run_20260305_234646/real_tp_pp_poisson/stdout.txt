@@ -1,0 +1,232 @@
+Using backend: simulation
+For 0-th device: tp_group=0, pp_rank=0, pp_size=2
+For 1-th device: tp_group=1, pp_rank=1, pp_size=2
+For 2-th device: tp_group=0, pp_rank=0, pp_size=2
+For 3-th device: tp_group=1, pp_rank=1, pp_size=2
+Initializing device phone_1
+> initializing model parallel with size 1
+> initializing ddp with size 1
+> initializing pipeline with size 1
+Loading a checkpoint (shards=1, current-mp-size=1)
+Assuming current MP rank as the new MP rank: 0
+Loading checkpoint shards:
+[PosixPath('checkpoints/Llama-3.1-8B-Instruct/original/consolidated.00.pth')]
+Resharding 1 state dicts from MP size 1 to MP size 2
+Setting default device to cpu
+Device phone_1 has layers 0 to 15
+Loading state dict...
+Done...
+Loaded in 2.98 seconds
+Initializing device phone_2
+Loading a checkpoint (shards=1, current-mp-size=None)
+Assuming current MP rank as the new MP rank: 0
+Loading checkpoint shards:
+[PosixPath('checkpoints/Llama-3.1-8B-Instruct/original/consolidated.00.pth')]
+Resharding 1 state dicts from MP size 1 to MP size 2
+Setting default device to cpu
+Device phone_2 has layers 16 to 31
+Loading state dict...
+Done...
+Loaded in 1.31 seconds
+Initializing device phone_3
+Loading a checkpoint (shards=1, current-mp-size=None)
+Assuming current MP rank as the new MP rank: 1
+Loading checkpoint shards:
+[PosixPath('checkpoints/Llama-3.1-8B-Instruct/original/consolidated.00.pth')]
+Resharding 1 state dicts from MP size 1 to MP size 2
+Setting default device to cpu
+Device phone_3 has layers 0 to 15
+Loading state dict...
+Done...
+Loaded in 5.12 seconds
+Initializing device phone_4
+Loading a checkpoint (shards=1, current-mp-size=None)
+Assuming current MP rank as the new MP rank: 1
+Loading checkpoint shards:
+[PosixPath('checkpoints/Llama-3.1-8B-Instruct/original/consolidated.00.pth')]
+Resharding 1 state dicts from MP size 1 to MP size 2
+Setting default device to cpu
+Device phone_4 has layers 16 to 31
+Loading state dict...
+Done...
+Loaded in 7.98 seconds
+Device phone_1 warming up...
+[phone_1] Generating 20 tokens for warmup...
+Device phone_2 warming up...
+[phone_2] Generating 20 tokens for warmup...
+Device phone_3 warming up...
+[phone_3] Generating 20 tokens for warmup...
+Device phone_4 warming up...
+[phone_4] Generating 20 tokens for warmup...
+[phone_3] Warmup complete. Generated text: Here we we go go:
+
+:
+
+11
+
+
+
+
+
+3
+444
+Device phone_3 is terminated after 4.156074493498628 seconds
+[phone_1] Warmup complete. Generated text: HereHere we we go go:
+
+:
+
+11
+22
+3
+
+44
+
+Device phone_1 is terminated after 4.160242032904507 seconds
+[phone_4] Warmup complete. Generated text: Here we we go go:
+
+:
+
+11
+
+2
+
+3
+44
+
+
+Device phone_4 is terminated after 4.219654972085653 seconds
+[phone_2] Warmup complete. Generated text: Here we we go go:
+
+:
+
+11
+
+2
+
+3
+44
+
+
+Device phone_2 is terminated after 4.219657116124889 seconds
+Going to run 1 combinations
+Sequence length: 128, tokens, max_tokens: 8 Repeat index: 0
+1.7290993127971888e-05: Device phone_3 synced time: 0.0000 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_3 processing 0 messages.
+5.337398033589125e-05: Device phone_1 synced time: 0.0000 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_1 processing 0 messages.
+0.10525345790665597: Device phone_3 synced time: 0.1051 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_3 processing 0 messages.
+0.00020328701902708413: Device phone_4 synced time: 0.0000 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_4 processing 0 messages.
+0.10548041597940028: Device phone_1 synced time: 0.1052 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_1 processing 0 messages.
+0.00021261997717028858: Device phone_2 synced time: 0.0000 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_2 processing 0 messages.
+0.10541503605163252: Device phone_4 synced time: 0.1051 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_4 processing 0 messages.
+0.20791262399870902: Device phone_1 synced time: 0.2076 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_1 processing 0 messages.
+0.10585653597917935: Device phone_2 synced time: 0.1052 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_2 processing 0 messages.
+0.21026333392364904: Device phone_3 synced time: 0.2099 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_3 processing 0 messages.
+0.3134248750284314: Device phone_1 synced time: 0.3132 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_1 processing 0 messages.
+0.20999232798312387: Device phone_2 synced time: 0.2076 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_2 processing 0 messages.
+0.31569616694469005: Device phone_3 synced time: 0.3153 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_3 processing 0 messages.
+0.21099124501888236: Device phone_4 synced time: 0.2099 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_4 processing 0 messages.
+0.41743883304297924: Device phone_1 synced time: 0.4171 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_1 processing 0 messages.
+0.3143664539904386: Device phone_2 synced time: 0.3132 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_2 processing 0 messages.
+0.4208127919700928: Device phone_3 synced time: 0.4205 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_3 processing 0 messages.
+0.3159655370629445: Device phone_4 synced time: 0.3153 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_4 processing 0 messages.
+0.523072041105479: Device phone_1 synced time: 0.5227 seconds.
+Total messages in queue: 1. Visible messages: 1
+Device phone_1 processing 1 messages.
+0.41748707708865934: Device phone_2 synced time: 0.4171 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_2 processing 0 messages.
+0.5264299999689683: Device phone_3 synced time: 0.5261 seconds.
+Total messages in queue: 1. Visible messages: 1
+Device phone_3 processing 1 messages.
+0.42093232806036773: Device phone_4 synced time: 0.4205 seconds.
+Total messages in queue: 2. Visible messages: 0
+Device phone_4 processing 0 messages.
+0.5231214941242762: Device phone_2 synced time: 0.5227 seconds.
+Total messages in queue: 1. Visible messages: 1
+Device phone_2 processing 1 messages.
+0.5264652029956743: Device phone_4 synced time: 0.5261 seconds.
+Total messages in queue: 1. Visible messages: 1
+Device phone_4 processing 1 messages.
+I
+
+[phone_4] Processed batch of size 1 in 9.6021 seconds.
+I
+
+[phone_1] Processed batch of size 1 in 9.6044 seconds.
+I
+
+[phone_2] Processed batch of size 1 in 9.6161 seconds.
+I
+
+[phone_3] Processed batch of size 1 in 9.6017 seconds.
+10.230162341864007: Device phone_1 synced time: 10.2299 seconds.
+Total messages in queue: 0. Visible messages: 1
+Device phone_1 processing 1 messages.
+10.229103717854406: Device phone_3 synced time: 10.2287 seconds.
+Total messages in queue: 0. Visible messages: 1
+Device phone_3 processing 1 messages.
+10.233936104832551: Device phone_4 synced time: 10.2287 seconds.
+Total messages in queue: 0. Visible messages: 1
+Device phone_4 processing 1 messages.
+10.241089198870066: Device phone_2 synced time: 10.2299 seconds.
+Total messages in queue: 0. Visible messages: 1
+Device phone_2 processing 1 messages.
+I
+
+[phone_1] Processed batch of size 1 in 3.4792 seconds.
+Average delay: 11.3483 seconds over 2 messages.
+Average processing time per batch: 6.5418 seconds over 2 batches.
+Device phone_1 is terminated after 13.814788568974329 seconds
+I
+
+[phone_2] Processed batch of size 1 in 7.5294 seconds.
+Average delay: 13.3846 seconds over 2 messages.
+Average processing time per batch: 8.5727 seconds over 2 batches.
+I
+
+[phone_3] Processed batch of size 1 in 7.5415 seconds.
+Average delay: 13.3791 seconds over 2 messages.
+Average processing time per batch: 8.5716 seconds over 2 batches.
+Device phone_3 is terminated after 17.872297892513572 seconds
+I
+
+[phone_4] Processed batch of size 1 in 7.5674 seconds.
+Average delay: 13.3946 seconds over 2 messages.
+Average processing time per batch: 8.5848 seconds over 2 batches.
+Device phone_2 is terminated after 17.875815165522653 seconds
+Device phone_4 is terminated after 17.905318545498844 seconds
