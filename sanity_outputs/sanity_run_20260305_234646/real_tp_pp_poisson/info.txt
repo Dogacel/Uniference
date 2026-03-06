@@ -1,4 +1,0 @@
-Command: DEVICE=cpu uv run benchmarks/real_tp_pp_poisson.py --text-lengths 128 --max-tokens 8 --repeats 1 --duration 1 --rate 1
-Return Code: 0
-Duration: 55.74s
-Status: PASSED

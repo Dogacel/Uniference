@@ -1,4 +1,0 @@
-Command: DEVICE=cpu uv run benchmarks/real_tp.py --text-lengths 128 --max-tokens 8 --repeats 1
-Return Code: 0
-Duration: 35.76s
-Status: PASSED
